@@ -1,0 +1,83 @@
+from datetime import date, datetime
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from pydantic import BaseModel
+from sqlalchemy import desc, select
+from sqlalchemy.orm import Session
+
+from broker.config import settings
+from broker.db import get_db
+from broker.models.scan import ScanResult, ScanRun
+
+router = APIRouter()
+
+
+class ScanRunOut(BaseModel):
+    id: int
+    started_at: datetime
+    finished_at: datetime | None
+    status: str
+    tickers_scanned: int | None
+    tickers_flagged: int | None
+
+    model_config = {"from_attributes": True}
+
+
+class ScanResultOut(BaseModel):
+    id: int
+    ticker: str
+    scan_date: date
+    composite_score: float | None
+    volume_score: float | None
+    momentum_score: float | None
+    rs_score: float | None
+    gap_score: float | None
+    price: float | None
+    volume_ratio: float | None
+    pct_change_1d: float | None
+    pct_change_5d: float | None
+    rsi_14: float | None
+    signals_fired: dict | None
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/scanner/runs", response_model=list[ScanRunOut])
+def list_scan_runs(limit: int = 20, db: Session = Depends(get_db)) -> list[ScanRun]:
+    return list(db.scalars(select(ScanRun).order_by(desc(ScanRun.started_at)).limit(limit)))
+
+
+@router.get("/scanner/runs/{run_id}", response_model=ScanRunOut)
+def get_scan_run(run_id: int, db: Session = Depends(get_db)) -> ScanRun:
+    run = db.get(ScanRun, run_id)
+    if not run:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Scan run not found")
+    return run
+
+
+@router.get("/scanner/results", response_model=list[ScanResultOut])
+def list_scan_results(
+    scan_date: date | None = None,
+    sector: str | None = None,
+    min_score: float = Query(default=0.0),
+    limit: int = Query(default=50, le=200),
+    db: Session = Depends(get_db),
+) -> list[ScanResult]:
+    stmt = (
+        select(ScanResult)
+        .where(ScanResult.composite_score >= min_score)
+        .order_by(desc(ScanResult.composite_score))
+        .limit(limit)
+    )
+    if scan_date:
+        stmt = stmt.where(ScanResult.scan_date == scan_date)
+    return list(db.scalars(stmt))
+
+
+@router.post("/scanner/trigger", status_code=202)
+def trigger_scan(background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> dict:
+    from broker.scanner.runner import ScanRunner
+    runner = ScanRunner(db)
+    background_tasks.add_task(runner.run_full_scan)
+    return {"message": "Scan triggered"}
