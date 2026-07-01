@@ -1,4 +1,4 @@
-# Signal Alpha — CLAUDE.md
+# Stock Broker — CLAUDE.md
 
 ## Project
 

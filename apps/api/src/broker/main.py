@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from broker.routers import health, paper_trades, scanner, thesis, universe, watchlist
 
-app = FastAPI(title="Signal Alpha API", version="0.1.0")
+app = FastAPI(title="Stock Broker API", version="0.1.0")
 
 app.add_middleware(
     CORSMiddleware,
