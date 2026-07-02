@@ -41,9 +41,13 @@ def get_watchlist(
     limit: int = Query(default=50, le=200),
     db: Session = Depends(get_db),
 ) -> list[WatchlistEntry]:
-    stmt = select(WatchlistEntry).order_by(WatchlistEntry.rank).limit(limit)
-    if watchlist_date:
-        stmt = stmt.where(WatchlistEntry.watchlist_date == watchlist_date)
+    effective_date = watchlist_date or date.today()
+    stmt = (
+        select(WatchlistEntry)
+        .where(WatchlistEntry.watchlist_date == effective_date)
+        .order_by(WatchlistEntry.rank)
+        .limit(limit)
+    )
     if status:
         stmt = stmt.where(WatchlistEntry.status == status)
     return list(db.scalars(stmt))
