@@ -24,6 +24,7 @@ class PaperTradeOut(BaseModel):
     approved_by: str | None
     approved_at: datetime | None
     exit_price: float | None
+    exit_date: date | None
     pnl: float | None
     pnl_pct: float | None
     close_reason: str | None
@@ -41,6 +42,11 @@ class CreatePaperTradeRequest(BaseModel):
     stop_price: float | None = None
     shares: int = 1
     notes: str | None = None
+
+
+class ClosePaperTradeRequest(BaseModel):
+    exit_price: float
+    close_reason: str = "manual"  # target_hit|stop_hit|manual|expired
 
 
 @router.get("/paper-trades", response_model=list[PaperTradeOut])
@@ -74,6 +80,7 @@ def approve_paper_trade(trade_id: int, db: Session = Depends(get_db)) -> PaperTr
     if trade.status != "pending_approval":
         raise HTTPException(status_code=400, detail=f"Trade is already {trade.status}")
     trade.status = "open"
+    trade.entry_date = date.today()
     trade.approved_by = "human"
     trade.approved_at = datetime.utcnow()
     db.commit()
@@ -87,6 +94,29 @@ def reject_paper_trade(trade_id: int, db: Session = Depends(get_db)) -> PaperTra
     if not trade:
         raise HTTPException(status_code=404, detail="Trade not found")
     trade.status = "rejected"
+    db.commit()
+    db.refresh(trade)
+    return trade
+
+
+@router.put("/paper-trades/{trade_id}/close", response_model=PaperTradeOut)
+def close_paper_trade(
+    trade_id: int, body: ClosePaperTradeRequest, db: Session = Depends(get_db)
+) -> PaperTrade:
+    trade = db.get(PaperTrade, trade_id)
+    if not trade:
+        raise HTTPException(status_code=404, detail="Trade not found")
+    if trade.status != "open":
+        raise HTTPException(status_code=400, detail=f"Trade is {trade.status}, not open")
+    trade.status = "closed"
+    trade.exit_price = body.exit_price
+    trade.exit_date = date.today()
+    trade.close_reason = body.close_reason
+    if trade.entry_price and trade.shares:
+        trade.pnl = (body.exit_price - trade.entry_price) * trade.shares
+        trade.pnl_pct = (body.exit_price - trade.entry_price) / trade.entry_price
+    if trade.entry_date:
+        trade.hold_days = (date.today() - trade.entry_date).days
     db.commit()
     db.refresh(trade)
     return trade

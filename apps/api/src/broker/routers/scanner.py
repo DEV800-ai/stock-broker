@@ -75,6 +75,19 @@ def list_scan_results(
     return list(db.scalars(stmt))
 
 
+@router.get("/scanner/results/{ticker}", response_model=ScanResultOut)
+def get_latest_scan_result(ticker: str, db: Session = Depends(get_db)) -> ScanResult:
+    result = db.scalars(
+        select(ScanResult)
+        .where(ScanResult.ticker == ticker.upper())
+        .order_by(desc(ScanResult.scan_date), desc(ScanResult.id))
+    ).first()
+    if not result:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail=f"No scan result for {ticker}")
+    return result
+
+
 @router.post("/scanner/trigger", status_code=202)
 def trigger_scan(background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> dict:
     from broker.scanner.runner import ScanRunner

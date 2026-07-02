@@ -13,6 +13,14 @@ import {
 import { api } from "@/lib/api";
 import type { StockThesis, WatchlistEntry } from "@/types";
 
+interface TradeForm {
+  entry_price: string;
+  target_price: string;
+  stop_price: string;
+  shares: string;
+  notes: string;
+}
+
 const STATUS_COLORS: Record<string, string> = {
   paper: "bg-green-100 text-green-800",
   research: "bg-blue-100 text-blue-800",
@@ -35,6 +43,9 @@ export default function WatchlistPage() {
   const [loadingThesis, setLoadingThesis] = useState(false);
   const [generatingTickers, setGeneratingTickers] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [tradeEntry, setTradeEntry] = useState<WatchlistEntry | null>(null);
+  const [tradeForm, setTradeForm] = useState<TradeForm>({ entry_price: "", target_price: "", stop_price: "", shares: "1", notes: "" });
+  const [submittingTrade, setSubmittingTrade] = useState(false);
 
   function loadEntries() {
     api.watchlist({ status: statusFilter || undefined, limit: 50 })
@@ -85,6 +96,37 @@ export default function WatchlistPage() {
     }
   }
 
+  async function openTradeDialog(entry: WatchlistEntry) {
+    setTradeForm({ entry_price: "", target_price: "", stop_price: "", shares: "1", notes: "" });
+    setTradeEntry(entry);
+    try {
+      const scan = await api.latestScanResult(entry.ticker);
+      if (scan.price) {
+        setTradeForm((f) => ({ ...f, entry_price: scan.price!.toFixed(2) }));
+      }
+    } catch { /* price prefill is best-effort */ }
+  }
+
+  async function submitTrade() {
+    if (!tradeEntry) return;
+    setSubmittingTrade(true);
+    try {
+      await api.createPaperTrade({
+        ticker: tradeEntry.ticker,
+        thesis_id: tradeEntry.thesis_id ?? undefined,
+        entry_price: parseFloat(tradeForm.entry_price),
+        target_price: tradeForm.target_price ? parseFloat(tradeForm.target_price) : undefined,
+        stop_price: tradeForm.stop_price ? parseFloat(tradeForm.stop_price) : undefined,
+        shares: parseInt(tradeForm.shares) || 1,
+        notes: tradeForm.notes || undefined,
+      });
+      setTradeEntry(null);
+      loadEntries();
+    } finally {
+      setSubmittingTrade(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -116,6 +158,7 @@ export default function WatchlistPage() {
               entry={entry}
               onViewThesis={openThesis}
               onGenerateThesis={generateThesis}
+              onCreateTrade={openTradeDialog}
               generating={generatingTickers.has(entry.ticker)}
             />
           ))}
@@ -131,6 +174,62 @@ export default function WatchlistPage() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!tradeEntry} onOpenChange={(o) => { if (!o) setTradeEntry(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Paper Trade — {tradeEntry?.ticker}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 mt-2">
+            <Field label="Entry price ($)" required>
+              <input
+                type="number" step="0.01" className={inputCls}
+                value={tradeForm.entry_price}
+                onChange={(e) => setTradeForm((f) => ({ ...f, entry_price: e.target.value }))}
+              />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Target price ($)">
+                <input type="number" step="0.01" className={inputCls}
+                  value={tradeForm.target_price}
+                  onChange={(e) => setTradeForm((f) => ({ ...f, target_price: e.target.value }))} />
+              </Field>
+              <Field label="Stop price ($)">
+                <input type="number" step="0.01" className={inputCls}
+                  value={tradeForm.stop_price}
+                  onChange={(e) => setTradeForm((f) => ({ ...f, stop_price: e.target.value }))} />
+              </Field>
+            </div>
+            <Field label="Shares">
+              <input type="number" min="1" className={inputCls}
+                value={tradeForm.shares}
+                onChange={(e) => setTradeForm((f) => ({ ...f, shares: e.target.value }))} />
+            </Field>
+            <Field label="Notes">
+              <textarea rows={2} className={inputCls}
+                value={tradeForm.notes}
+                onChange={(e) => setTradeForm((f) => ({ ...f, notes: e.target.value }))} />
+            </Field>
+            <div className="flex gap-2 pt-1">
+              <Button className="flex-1" disabled={!tradeForm.entry_price || submittingTrade} onClick={submitTrade}>
+                {submittingTrade ? "Submitting…" : "Submit for Approval"}
+              </Button>
+              <Button variant="outline" onClick={() => setTradeEntry(null)}>Cancel</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+const inputCls = "w-full rounded-md border border-zinc-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400";
+
+function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
+  return (
+    <div className="space-y-1">
+      <label className="text-xs font-medium text-zinc-500">{label}{required && " *"}</label>
+      {children}
     </div>
   );
 }
@@ -139,15 +238,18 @@ function WatchlistCard({
   entry,
   onViewThesis,
   onGenerateThesis,
+  onCreateTrade,
   generating,
 }: {
   entry: WatchlistEntry;
   onViewThesis: (e: WatchlistEntry) => void;
   onGenerateThesis: (e: WatchlistEntry) => void;
+  onCreateTrade: (e: WatchlistEntry) => void;
   generating: boolean;
 }) {
   const scorePercent = Math.round((entry.composite_score ?? 0) * 100);
   const eligible = !entry.thesis_id && (entry.composite_score ?? 0) >= THESIS_MIN_SCORE;
+  const canTrade = entry.thesis_id && entry.status !== "paper" && entry.status !== "avoid";
 
   return (
     <Card className="hover:shadow-sm transition-shadow">
@@ -176,26 +278,22 @@ function WatchlistCard({
           </div>
         </div>
 
-        {entry.thesis_id ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full text-xs"
-            onClick={() => onViewThesis(entry)}
-          >
-            View Thesis
-          </Button>
-        ) : eligible ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full text-xs"
-            disabled={generating}
-            onClick={() => onGenerateThesis(entry)}
-          >
-            {generating ? "Generating…" : "Generate Thesis"}
-          </Button>
-        ) : null}
+        <div className="flex gap-2">
+          {entry.thesis_id ? (
+            <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => onViewThesis(entry)}>
+              View Thesis
+            </Button>
+          ) : eligible ? (
+            <Button variant="outline" size="sm" className="flex-1 text-xs" disabled={generating} onClick={() => onGenerateThesis(entry)}>
+              {generating ? "Generating…" : "Generate Thesis"}
+            </Button>
+          ) : null}
+          {canTrade && (
+            <Button size="sm" className="flex-1 text-xs" onClick={() => onCreateTrade(entry)}>
+              Paper Trade
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

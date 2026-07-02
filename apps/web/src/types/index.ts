@@ -85,8 +85,10 @@ export interface PaperTrade {
   approved_by: string | null;
   approved_at: string | null;
   exit_price: number | null;
+  exit_date: string | null;
   pnl: number | null;
   pnl_pct: number | null;
+  hold_days: number | null;
   close_reason: string | null;
   notes: string | null;
   created_at: string;

@@ -62,5 +62,34 @@ export const api = {
       body: JSON.stringify({ ticker, scan_result_id: scanResultId }),
     }),
 
+  latestScanResult: (ticker: string) =>
+    apiFetch<ScanResult>(`/api/v1/scanner/results/${ticker}`),
+
   paperTrades: () => apiFetch<PaperTrade[]>("/api/v1/paper-trades"),
+
+  createPaperTrade: (body: {
+    ticker: string;
+    thesis_id?: number;
+    entry_price: number;
+    target_price?: number;
+    stop_price?: number;
+    shares?: number;
+    notes?: string;
+  }) =>
+    apiFetch<PaperTrade>("/api/v1/paper-trades", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  approveTrade: (id: number) =>
+    apiFetch<PaperTrade>(`/api/v1/paper-trades/${id}/approve`, { method: "PUT" }),
+
+  rejectTrade: (id: number) =>
+    apiFetch<PaperTrade>(`/api/v1/paper-trades/${id}/reject`, { method: "PUT" }),
+
+  closeTrade: (id: number, exit_price: number, close_reason = "manual") =>
+    apiFetch<PaperTrade>(`/api/v1/paper-trades/${id}/close`, {
+      method: "PUT",
+      body: JSON.stringify({ exit_price, close_reason }),
+    }),
 };
