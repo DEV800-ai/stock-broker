@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from broker.audit.service import log as audit_log
 from broker.db import get_db
 from broker.models.paper_trade import PaperTrade
 
@@ -83,6 +84,10 @@ def approve_paper_trade(trade_id: int, db: Session = Depends(get_db)) -> PaperTr
     trade.entry_date = date.today()
     trade.approved_by = "human"
     trade.approved_at = datetime.utcnow()
+    audit_log(
+        db, actor="human", action="approve_paper_trade", entity_type="paper_trade", entity_id=trade.id,
+        details={"ticker": trade.ticker, "entry_price": trade.entry_price, "shares": trade.shares},
+    )
     db.commit()
     db.refresh(trade)
     return trade
@@ -94,6 +99,10 @@ def reject_paper_trade(trade_id: int, db: Session = Depends(get_db)) -> PaperTra
     if not trade:
         raise HTTPException(status_code=404, detail="Trade not found")
     trade.status = "rejected"
+    audit_log(
+        db, actor="human", action="reject_paper_trade", entity_type="paper_trade", entity_id=trade.id,
+        details={"ticker": trade.ticker},
+    )
     db.commit()
     db.refresh(trade)
     return trade
@@ -117,6 +126,10 @@ def close_paper_trade(
         trade.pnl_pct = (body.exit_price - trade.entry_price) / trade.entry_price
     if trade.entry_date:
         trade.hold_days = (date.today() - trade.entry_date).days
+    audit_log(
+        db, actor="human", action="close_paper_trade", entity_type="paper_trade", entity_id=trade.id,
+        details={"ticker": trade.ticker, "exit_price": trade.exit_price, "pnl": trade.pnl, "close_reason": trade.close_reason},
+    )
     db.commit()
     db.refresh(trade)
     return trade

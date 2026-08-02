@@ -1,6 +1,5 @@
 import logging
 import time
-from datetime import date
 
 import pandas as pd
 import requests
@@ -27,7 +26,7 @@ class IBKRClient:
     """Thin wrapper around the IBKR Client Portal Web API.
 
     Requires the IBKR Gateway process to be running and authenticated.
-    The gateway URL defaults to http://localhost:5000 (set IBKR_GATEWAY_URL to override).
+    The gateway URL defaults to https://localhost:5000 (set IBKR_GATEWAY_URL to override).
 
     Usage:
         client = IBKRClient()

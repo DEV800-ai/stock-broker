@@ -6,7 +6,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://postgres:password@localhost:5432/signalalpha"
 
-    ibkr_gateway_url: str = "http://localhost:5000"
+    ibkr_gateway_url: str = "https://localhost:5000"
     ibkr_account_id: str = ""
 
     anthropic_api_key: str = ""
@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     scanner_min_score: float = 0.30
     thesis_min_score: float = 0.50
     scanner_universe_size: int = 500
+
+    paper_account_equity: float = 100_000.0
+    risk_cooldown_days: int = 14
 
 
 settings = Settings()

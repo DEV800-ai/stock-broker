@@ -27,7 +27,9 @@ def health_check() -> HealthResponse:
 
 def _check_ibkr() -> bool:
     try:
-        resp = requests.get(f"{settings.ibkr_gateway_url}/v1/api/iserver/auth/status", timeout=3)
-        return resp.status_code == 200
+        resp = requests.get(
+            f"{settings.ibkr_gateway_url}/v1/api/iserver/auth/status", timeout=3, verify=False
+        )
+        return resp.status_code == 200 and resp.json().get("authenticated") is True
     except Exception:
         return False

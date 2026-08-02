@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from broker.config import settings
 from broker.db import get_db
 from broker.models.scan import ScanResult, ScanRun
 
