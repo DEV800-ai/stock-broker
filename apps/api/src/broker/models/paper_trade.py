@@ -19,6 +19,14 @@ class PaperTrade(Base):
     stop_price: Mapped[float | None] = mapped_column(Double)
     shares: Mapped[int | None] = mapped_column(Integer)
 
+    # Requested vs. actually-filled size/price, so theoretical (naive) performance
+    # can be compared against what the fill simulator actually executed. See
+    # execution/paper_adapter.py.
+    requested_shares: Mapped[int | None] = mapped_column(Integer)
+    theoretical_entry_price: Mapped[float | None] = mapped_column(Double)
+    theoretical_exit_price: Mapped[float | None] = mapped_column(Double)
+    fill_status: Mapped[str | None] = mapped_column(String(20))  # filled|partial
+
     # pending_approval → open → closed / rejected
     status: Mapped[str] = mapped_column(String(20), default="pending_approval", index=True)
     approved_by: Mapped[str | None] = mapped_column(String(100))

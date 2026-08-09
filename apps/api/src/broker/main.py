@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from broker.auth import require_actor
 from broker.routers import audit, health, orders, paper_trades, scanner, thesis, universe, watchlist
 
 app = FastAPI(title="Stock Broker API", version="0.1.0")
@@ -14,12 +15,13 @@ app.add_middleware(
 )
 
 PREFIX = "/api/v1"
+AUTH = [Depends(require_actor)]
 
 app.include_router(health.router, prefix=PREFIX, tags=["health"])
-app.include_router(universe.router, prefix=PREFIX, tags=["universe"])
-app.include_router(scanner.router, prefix=PREFIX, tags=["scanner"])
-app.include_router(watchlist.router, prefix=PREFIX, tags=["watchlist"])
-app.include_router(thesis.router, prefix=PREFIX, tags=["thesis"])
-app.include_router(paper_trades.router, prefix=PREFIX, tags=["paper-trades"])
-app.include_router(orders.router, prefix=PREFIX, tags=["orders"])
-app.include_router(audit.router, prefix=PREFIX, tags=["audit"])
+app.include_router(universe.router, prefix=PREFIX, tags=["universe"], dependencies=AUTH)
+app.include_router(scanner.router, prefix=PREFIX, tags=["scanner"], dependencies=AUTH)
+app.include_router(watchlist.router, prefix=PREFIX, tags=["watchlist"], dependencies=AUTH)
+app.include_router(thesis.router, prefix=PREFIX, tags=["thesis"], dependencies=AUTH)
+app.include_router(paper_trades.router, prefix=PREFIX, tags=["paper-trades"], dependencies=AUTH)
+app.include_router(orders.router, prefix=PREFIX, tags=["orders"], dependencies=AUTH)
+app.include_router(audit.router, prefix=PREFIX, tags=["audit"], dependencies=AUTH)

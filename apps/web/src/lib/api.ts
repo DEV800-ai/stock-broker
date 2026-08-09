@@ -9,11 +9,18 @@ import type {
 } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? "";
+const ACTOR = process.env.NEXT_PUBLIC_ACTOR ?? "operator";
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": API_KEY,
+      "X-Actor": ACTOR,
+      ...init?.headers,
+    },
   });
   if (!res.ok) {
     const text = await res.text();

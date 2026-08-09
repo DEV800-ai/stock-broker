@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from broker.audit.service import log as audit_log
+from broker.auth import require_actor
 from broker.db import get_db
 from broker.models.paper_trade import PaperTrade
 
@@ -74,7 +75,9 @@ def create_paper_trade(body: CreatePaperTradeRequest, db: Session = Depends(get_
 
 
 @router.put("/paper-trades/{trade_id}/approve", response_model=PaperTradeOut)
-def approve_paper_trade(trade_id: int, db: Session = Depends(get_db)) -> PaperTrade:
+def approve_paper_trade(
+    trade_id: int, db: Session = Depends(get_db), actor: str = Depends(require_actor)
+) -> PaperTrade:
     trade = db.get(PaperTrade, trade_id)
     if not trade:
         raise HTTPException(status_code=404, detail="Trade not found")
@@ -82,10 +85,10 @@ def approve_paper_trade(trade_id: int, db: Session = Depends(get_db)) -> PaperTr
         raise HTTPException(status_code=400, detail=f"Trade is already {trade.status}")
     trade.status = "open"
     trade.entry_date = date.today()
-    trade.approved_by = "human"
+    trade.approved_by = actor
     trade.approved_at = datetime.utcnow()
     audit_log(
-        db, actor="human", action="approve_paper_trade", entity_type="paper_trade", entity_id=trade.id,
+        db, actor=actor, action="approve_paper_trade", entity_type="paper_trade", entity_id=trade.id,
         details={"ticker": trade.ticker, "entry_price": trade.entry_price, "shares": trade.shares},
     )
     db.commit()
@@ -94,13 +97,15 @@ def approve_paper_trade(trade_id: int, db: Session = Depends(get_db)) -> PaperTr
 
 
 @router.put("/paper-trades/{trade_id}/reject", response_model=PaperTradeOut)
-def reject_paper_trade(trade_id: int, db: Session = Depends(get_db)) -> PaperTrade:
+def reject_paper_trade(
+    trade_id: int, db: Session = Depends(get_db), actor: str = Depends(require_actor)
+) -> PaperTrade:
     trade = db.get(PaperTrade, trade_id)
     if not trade:
         raise HTTPException(status_code=404, detail="Trade not found")
     trade.status = "rejected"
     audit_log(
-        db, actor="human", action="reject_paper_trade", entity_type="paper_trade", entity_id=trade.id,
+        db, actor=actor, action="reject_paper_trade", entity_type="paper_trade", entity_id=trade.id,
         details={"ticker": trade.ticker},
     )
     db.commit()
@@ -110,7 +115,10 @@ def reject_paper_trade(trade_id: int, db: Session = Depends(get_db)) -> PaperTra
 
 @router.put("/paper-trades/{trade_id}/close", response_model=PaperTradeOut)
 def close_paper_trade(
-    trade_id: int, body: ClosePaperTradeRequest, db: Session = Depends(get_db)
+    trade_id: int,
+    body: ClosePaperTradeRequest,
+    db: Session = Depends(get_db),
+    actor: str = Depends(require_actor),
 ) -> PaperTrade:
     trade = db.get(PaperTrade, trade_id)
     if not trade:
@@ -127,7 +135,7 @@ def close_paper_trade(
     if trade.entry_date:
         trade.hold_days = (date.today() - trade.entry_date).days
     audit_log(
-        db, actor="human", action="close_paper_trade", entity_type="paper_trade", entity_id=trade.id,
+        db, actor=actor, action="close_paper_trade", entity_type="paper_trade", entity_id=trade.id,
         details={"ticker": trade.ticker, "exit_price": trade.exit_price, "pnl": trade.pnl, "close_reason": trade.close_reason},
     )
     db.commit()

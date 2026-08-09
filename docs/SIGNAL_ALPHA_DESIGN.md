@@ -541,6 +541,12 @@ class BrokerAdapter(ABC):
 
 Adding a second broker later (e.g. Alpaca) means writing one adapter class — nothing above the adapter layer should know it's talking to IBKR specifically.
 
+**IBKR connection model — decision:** MVP and single-operator use stay on the **Client Portal Gateway** (local Java process, manual 2FA login, already documented in `CLAUDE.md`) as the sole `IBKRLocalGatewayAdapter` implementation. This is deliberate, not a placeholder to "fix" later:
+- Persona "Dana" (§2.1) connects her own account — this is the model IBKR's retail/individual access is built for.
+- IBKR's **Web API with OAuth** is a real alternative that removes the local-gateway dependency, but it changes the product's compliance posture: connecting to *other users'* IBKR accounts makes Signal Alpha a third-party vendor in IBKR's terms, which historically requires separate IBKR compliance/onboarding approval and may implicate financial-authority registration questions. That's explicitly out of scope — Signal Alpha does not support multi-account/multi-user access in MVP (§2.1 tertiary persona, §14).
+- Because `BrokerAdapter` is already an interface (not concrete IBKR calls sprinkled through the codebase), swapping in an `IBKROAuthWebApiAdapter` later — if Signal Alpha ever becomes a multi-user product — is a new adapter class, not a rearchitecture. No code above the adapter layer should change.
+- Action item: none for MVP. Revisit only if/when multi-user access becomes a real product direction, and treat the IBKR third-party approval process as its own milestone with legal input, not an engineering task to route around.
+
 ---
 
 ## 10. MVP Milestone Plan

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from broker.audit.service import log as audit_log
 from broker.config import settings
-from broker.execution.paper_adapter import simulate_fill
+from broker.execution.paper_adapter import FillResult, simulate_fill
 from broker.models.order import OrderPreview
 from broker.models.paper_trade import PaperTrade
 from broker.models.price_bar import PriceBar
@@ -36,6 +36,23 @@ class InvalidPreviewState(Exception):
 
 class InvalidOrderRequest(Exception):
     pass
+
+
+class PreviewExpired(Exception):
+    pass
+
+
+class PreviewBlockedAtApproval(Exception):
+    def __init__(self, verdict: str) -> None:
+        super().__init__(f"Risk re-evaluation at approval time returned verdict {verdict!r}; approval blocked")
+        self.verdict = verdict
+
+
+class FillRejected(Exception):
+    def __init__(self, ticker: str, action: str) -> None:
+        super().__init__(f"Simulated fill for {action} {ticker} was rejected: order size too large relative to liquidity")
+        self.ticker = ticker
+        self.action = action
 
 
 # ------------------------------------------------------------------
@@ -285,24 +302,41 @@ def approve_preview(db: Session, preview_id: int, approved_by: str = "human") ->
     if preview.status != "pending":
         raise InvalidPreviewState(f"Order preview {preview_id} is {preview.status}, not pending")
 
-    fill_price = simulate_fill(preview.limit_price)
-
-    if preview.action == "BUY":
-        trade = PaperTrade(
-            ticker=preview.ticker,
-            thesis_id=preview.thesis_id,
-            entry_price=fill_price,
-            shares=preview.shares,
-            status="open",
-            entry_date=date.today(),
-            approved_by=approved_by,
-            approved_at=datetime.utcnow(),
-            notes=f"Opened from order_preview {preview.id}: {preview.reason}",
+    age = datetime.utcnow() - preview.created_at
+    if age > timedelta(minutes=settings.order_preview_ttl_minutes):
+        raise PreviewExpired(
+            f"Order preview {preview_id} is {age} old, exceeds "
+            f"{settings.order_preview_ttl_minutes}-minute TTL; request a fresh preview"
         )
-        db.add(trade)
-        db.flush()
-        preview.paper_trade_id = trade.id
-    else:
+
+    # Portfolio state, cooldowns, and kill-switch status can all have changed since the
+    # preview was created — re-run the risk engine now, not just at preview time, so a
+    # still-fresh (within-TTL) preview can't slip past a rule that would now block it.
+    reeval_ctx = build_risk_context(
+        db, preview.ticker, preview.action, preview.shares, preview.limit_price, preview.thesis_id
+    )
+    reevaluation = evaluate_risk(reeval_ctx)
+    db.add(RiskEvaluationRecord(
+        ticker=preview.ticker,
+        order_preview_id=preview.id,
+        verdict=reevaluation.verdict,
+        rule_results_json=[asdict(r) for r in reevaluation.results],
+    ))
+    if reevaluation.verdict == "blocked":
+        preview.status = "blocked"
+        preview.risk_status = reevaluation.verdict
+        audit_log(
+            db, actor=approved_by, action="approve_order_blocked_on_reeval",
+            entity_type="order_preview", entity_id=preview.id,
+            details={"ticker": preview.ticker, "verdict": reevaluation.verdict},
+        )
+        db.commit()
+        raise PreviewBlockedAtApproval(reevaluation.verdict)
+
+    avg_daily_volume = _avg_daily_volume(db, preview.ticker)
+    open_trade: PaperTrade | None = None
+
+    if preview.action == "SELL":
         open_trade = db.scalars(
             select(PaperTrade)
             .where(PaperTrade.ticker == preview.ticker)
@@ -311,13 +345,60 @@ def approve_preview(db: Session, preview_id: int, approved_by: str = "human") ->
         ).first()
         if not open_trade:
             raise InvalidPreviewState(f"No open paper trade for {preview.ticker} to sell")
+        # Exits don't partial-fill in this model — PaperTrade can't represent a position
+        # closed across two exit prices/dates without splitting the trade row. They can
+        # still be rejected outright for an illiquid ticker.
+        fill: FillResult = simulate_fill(
+            preview.action, preview.limit_price, open_trade.shares, avg_daily_volume, allow_partial=False
+        )
+    else:
+        fill = simulate_fill(
+            preview.action, preview.limit_price, preview.shares, avg_daily_volume, allow_partial=True
+        )
+
+    if fill.status == "rejected":
+        preview.status = "rejected"
+        audit_log(
+            db, actor=approved_by, action="approve_order_fill_rejected",
+            entity_type="order_preview", entity_id=preview.id,
+            details={
+                "ticker": preview.ticker,
+                "requested_shares": open_trade.shares if open_trade else preview.shares,
+                "avg_daily_volume": avg_daily_volume,
+            },
+        )
+        db.commit()
+        raise FillRejected(preview.ticker, preview.action)
+
+    if preview.action == "BUY":
+        trade = PaperTrade(
+            ticker=preview.ticker,
+            thesis_id=preview.thesis_id,
+            entry_price=fill.fill_price,
+            theoretical_entry_price=fill.theoretical_price,
+            requested_shares=preview.shares,
+            shares=fill.filled_shares,
+            fill_status=fill.status,
+            status="open",
+            entry_date=date.today(),
+            approved_by=approved_by,
+            approved_at=datetime.utcnow(),
+            notes=f"Opened from order_preview {preview.id}: {preview.reason}"
+            + (f" (partial fill: {fill.filled_shares}/{preview.shares} shares)" if fill.status == "partial" else ""),
+        )
+        db.add(trade)
+        db.flush()
+        preview.paper_trade_id = trade.id
+    else:
         open_trade.status = "closed"
-        open_trade.exit_price = fill_price
+        open_trade.exit_price = fill.fill_price
+        open_trade.theoretical_exit_price = fill.theoretical_price
+        open_trade.fill_status = fill.status
         open_trade.exit_date = date.today()
         open_trade.close_reason = "manual"
         if open_trade.entry_price and open_trade.shares:
-            open_trade.pnl = (fill_price - open_trade.entry_price) * open_trade.shares
-            open_trade.pnl_pct = (fill_price - open_trade.entry_price) / open_trade.entry_price
+            open_trade.pnl = (fill.fill_price - open_trade.entry_price) * open_trade.shares
+            open_trade.pnl_pct = (fill.fill_price - open_trade.entry_price) / open_trade.entry_price
         if open_trade.entry_date:
             open_trade.hold_days = (date.today() - open_trade.entry_date).days
         preview.paper_trade_id = open_trade.id
@@ -327,7 +408,13 @@ def approve_preview(db: Session, preview_id: int, approved_by: str = "human") ->
     preview.approved_at = datetime.utcnow()
     audit_log(
         db, actor=approved_by, action="approve_order", entity_type="order_preview", entity_id=preview.id,
-        details={"ticker": preview.ticker, "fill_price": fill_price, "paper_trade_id": preview.paper_trade_id},
+        details={
+            "ticker": preview.ticker,
+            "fill_price": fill.fill_price,
+            "fill_status": fill.status,
+            "filled_shares": fill.filled_shares,
+            "paper_trade_id": preview.paper_trade_id,
+        },
     )
     db.commit()
     db.refresh(preview)

@@ -24,6 +24,7 @@ podman run -d --name signalalpha-pg \
 ```bash
 cd apps/api
 cp ../../.env.example .env   # fill in your keys
+# API_KEY is required — generate one with: openssl rand -hex 32
 uv venv .venv && uv pip install -e ".[dev]"
 PYTHONPATH=src .venv/bin/alembic upgrade head
 PYTHONPATH=src .venv/bin/uvicorn broker.main:app --reload
@@ -32,6 +33,7 @@ PYTHONPATH=src .venv/bin/uvicorn broker.main:app --reload
 ### Frontend
 ```bash
 cd apps/web
+cp .env.local.example .env.local   # NEXT_PUBLIC_API_KEY must match the API's API_KEY
 npm install
 npm run dev
 ```
@@ -52,6 +54,7 @@ npm run dev
 - **Claude API calls are always logged** to agent_runs table. Never fire-and-forget.
 - **Thesis caching:** check agent_runs.input_hash (SHA256 of ticker+date+signals) before generating. Never regenerate the same thesis.
 - **Thesis only generated** for tickers with composite_score > settings.thesis_min_score (default 0.50).
+- **All API routes except /health require auth** (`X-API-Key` header, checked in `broker/auth.py`). Never add a new router without the `dependencies=[Depends(require_actor)]` wiring in `main.py`, and never hardcode `approved_by`/audit `actor` — use the identity from `require_actor`.
 
 ## Database
 

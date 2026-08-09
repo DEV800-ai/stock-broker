@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from broker.auth import require_actor
 from broker.db import get_db
 from broker.models.order import OrderPreview
 from broker.orders import service
@@ -97,19 +98,29 @@ def get_order_preview(preview_id: int, db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/orders/{preview_id}/approve", response_model=OrderPreviewOut)
-def approve_order(preview_id: int, db: Session = Depends(get_db)) -> OrderPreview:
+def approve_order(
+    preview_id: int, db: Session = Depends(get_db), actor: str = Depends(require_actor)
+) -> OrderPreview:
     try:
-        return service.approve_preview(db, preview_id)
+        return service.approve_preview(db, preview_id, approved_by=actor)
     except service.OrderPreviewNotFound as exc:
         raise HTTPException(status_code=404, detail="Order preview not found") from exc
     except service.InvalidPreviewState as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except service.PreviewExpired as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except service.PreviewBlockedAtApproval as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except service.FillRejected as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.post("/orders/{preview_id}/reject", response_model=OrderPreviewOut)
-def reject_order(preview_id: int, db: Session = Depends(get_db)) -> OrderPreview:
+def reject_order(
+    preview_id: int, db: Session = Depends(get_db), actor: str = Depends(require_actor)
+) -> OrderPreview:
     try:
-        return service.reject_preview(db, preview_id)
+        return service.reject_preview(db, preview_id, rejected_by=actor)
     except service.OrderPreviewNotFound as exc:
         raise HTTPException(status_code=404, detail="Order preview not found") from exc
     except service.InvalidPreviewState as exc:
