@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from broker.audit.service import log as audit_log
-from broker.auth import require_actor
+from broker.auth import require_human_actor
 from broker.db import get_db
 from broker.models.paper_trade import PaperTrade
 
@@ -76,7 +76,7 @@ def create_paper_trade(body: CreatePaperTradeRequest, db: Session = Depends(get_
 
 @router.put("/paper-trades/{trade_id}/approve", response_model=PaperTradeOut)
 def approve_paper_trade(
-    trade_id: int, db: Session = Depends(get_db), actor: str = Depends(require_actor)
+    trade_id: int, db: Session = Depends(get_db), actor: str = Depends(require_human_actor)
 ) -> PaperTrade:
     trade = db.get(PaperTrade, trade_id)
     if not trade:
@@ -98,7 +98,7 @@ def approve_paper_trade(
 
 @router.put("/paper-trades/{trade_id}/reject", response_model=PaperTradeOut)
 def reject_paper_trade(
-    trade_id: int, db: Session = Depends(get_db), actor: str = Depends(require_actor)
+    trade_id: int, db: Session = Depends(get_db), actor: str = Depends(require_human_actor)
 ) -> PaperTrade:
     trade = db.get(PaperTrade, trade_id)
     if not trade:
@@ -118,7 +118,7 @@ def close_paper_trade(
     trade_id: int,
     body: ClosePaperTradeRequest,
     db: Session = Depends(get_db),
-    actor: str = Depends(require_actor),
+    actor: str = Depends(require_human_actor),
 ) -> PaperTrade:
     trade = db.get(PaperTrade, trade_id)
     if not trade:

@@ -8,6 +8,14 @@ class Settings(BaseSettings):
 
     api_key: str = ""
 
+    # Second, distinct secret for human-confirmation-gated actions (order/paper-trade
+    # approval, kill switch). See auth.py::require_human_actor. Optional: if unset
+    # (default), those endpoints fall back to accepting api_key alone, so existing
+    # single-key deployments keep working unchanged. Set this once a caller other than
+    # the frontend (e.g. a future agent gateway) holds api_key, so that caller can't
+    # also approve trades or touch the kill switch.
+    human_approval_key: str = ""
+
     ibkr_gateway_url: str = "https://localhost:5000"
     ibkr_account_id: str = ""
 

@@ -55,6 +55,7 @@ npm run dev
 - **Thesis caching:** check agent_runs.input_hash (SHA256 of ticker+date+signals) before generating. Never regenerate the same thesis.
 - **Thesis only generated** for tickers with composite_score > settings.thesis_min_score (default 0.50).
 - **All API routes except /health require auth** (`X-API-Key` header, checked in `broker/auth.py`). Never add a new router without the `dependencies=[Depends(require_actor)]` wiring in `main.py`, and never hardcode `approved_by`/audit `actor` — use the identity from `require_actor`.
+- **Human-only actions use `require_human_actor`, not `require_actor`.** Order/paper-trade approval and reject, and the agent kill switch's `unkill`/`autonomy-mode` endpoints, must depend on `require_human_actor` (`broker/auth.py`) so they can be gated behind the optional second `X-Human-Key` secret (`settings.human_approval_key`) once one exists — never wire a new approval-style endpoint to plain `require_actor`. Tightening the kill switch (`POST /agent-control/kill`) stays on `require_actor` deliberately — anyone with API access should be able to trip it, only loosening it should need the human key.
 
 ## Database
 

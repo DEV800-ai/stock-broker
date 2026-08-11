@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from broker.auth import require_actor
+from broker.auth import require_human_actor
 from broker.db import get_db
 from broker.models.order import OrderPreview
 from broker.orders import service
@@ -99,7 +99,7 @@ def get_order_preview(preview_id: int, db: Session = Depends(get_db)) -> dict:
 
 @router.post("/orders/{preview_id}/approve", response_model=OrderPreviewOut)
 def approve_order(
-    preview_id: int, db: Session = Depends(get_db), actor: str = Depends(require_actor)
+    preview_id: int, db: Session = Depends(get_db), actor: str = Depends(require_human_actor)
 ) -> OrderPreview:
     try:
         return service.approve_preview(db, preview_id, approved_by=actor)
@@ -117,7 +117,7 @@ def approve_order(
 
 @router.post("/orders/{preview_id}/reject", response_model=OrderPreviewOut)
 def reject_order(
-    preview_id: int, db: Session = Depends(get_db), actor: str = Depends(require_actor)
+    preview_id: int, db: Session = Depends(get_db), actor: str = Depends(require_human_actor)
 ) -> OrderPreview:
     try:
         return service.reject_preview(db, preview_id, rejected_by=actor)

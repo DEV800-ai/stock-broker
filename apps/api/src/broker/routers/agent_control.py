@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from broker.agent_control import service
-from broker.auth import require_actor
+from broker.auth import require_actor, require_human_actor
 from broker.db import get_db
 
 router = APIRouter()
@@ -44,13 +44,13 @@ def kill_agent(
 
 
 @router.post("/agent-control/unkill", response_model=AgentControlOut)
-def unkill_agent(db: Session = Depends(get_db), actor: str = Depends(require_actor)) -> AgentControlOut:
+def unkill_agent(db: Session = Depends(get_db), actor: str = Depends(require_human_actor)) -> AgentControlOut:
     return service.unkill(db, actor=actor)
 
 
 @router.post("/agent-control/autonomy-mode", response_model=AgentControlOut)
 def set_autonomy_mode(
-    body: AutonomyModeIn, db: Session = Depends(get_db), actor: str = Depends(require_actor)
+    body: AutonomyModeIn, db: Session = Depends(get_db), actor: str = Depends(require_human_actor)
 ) -> AgentControlOut:
     try:
         return service.set_autonomy_mode(db, actor=actor, mode=body.mode)
