@@ -41,3 +41,5 @@ class AgentControl(Base):
     killed_reason: Mapped[str | None] = mapped_column(Text)
     killed_at: Mapped[datetime | None] = mapped_column(DateTime)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+    # Who last changed this row via the agent-control API — see agent_control/service.py.
+    updated_by: Mapped[str | None] = mapped_column(String(100))
