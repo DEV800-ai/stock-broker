@@ -27,6 +27,10 @@ class OrderPreview(Base):
     risk_status: Mapped[str] = mapped_column(String(30), nullable=False)
     approval_required: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # paper (default, all of Phase 3) | live_preview | live — see execution/base.py.
+    # Always "paper" today; Phase 4 wiring will set this and branch on it in get_broker_adapter().
+    execution_mode: Mapped[str] = mapped_column(String(20), default="paper")
+
     # pending (awaiting human decision) | approved | rejected | blocked (never entered the queue)
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     paper_trade_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("paper_trades.id"))

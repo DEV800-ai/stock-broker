@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 
@@ -45,6 +45,40 @@ def fetch_company_news(ticker: str, days: int = 7) -> list[dict]:
     except Exception as exc:
         logger.warning("Finnhub news fetch failed for %s: %s", ticker, exc)
         return []
+
+
+def fetch_next_earnings_date(ticker: str) -> date | None:
+    """Next scheduled earnings date for ticker (today or later), or None if unset/unknown.
+    Feeds risk/rules.py::check_earnings_proximity via orders/service.py::build_risk_context."""
+    if not settings.finnhub_api_key:
+        logger.warning("finnhub_api_key not set — skipping earnings calendar fetch")
+        return None
+
+    today = datetime.now(timezone.utc).date()
+    to_dt = today + timedelta(days=90)
+
+    try:
+        resp = httpx.get(
+            f"{_BASE}/calendar/earnings",
+            params={
+                "symbol": ticker,
+                "from": today.strftime("%Y-%m-%d"),
+                "to": to_dt.strftime("%Y-%m-%d"),
+                "token": settings.finnhub_api_key,
+            },
+            timeout=_TIMEOUT,
+        )
+        resp.raise_for_status()
+        rows = (resp.json() or {}).get("earningsCalendar", [])
+        dates = [
+            date.fromisoformat(row["date"])
+            for row in rows
+            if row.get("date")
+        ]
+        return min(dates) if dates else None
+    except Exception as exc:
+        logger.warning("Finnhub earnings calendar fetch failed for %s: %s", ticker, exc)
+        return None
 
 
 def classify_article(article: dict) -> tuple[str | None, float]:

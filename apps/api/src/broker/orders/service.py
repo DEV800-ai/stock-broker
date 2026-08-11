@@ -14,7 +14,9 @@ from sqlalchemy.orm import Session
 
 from broker.audit.service import log as audit_log
 from broker.config import settings
-from broker.execution.paper_adapter import FillResult, simulate_fill
+from broker.data.finnhub import fetch_next_earnings_date
+from broker.execution.base import BrokerAdapter, FillResult
+from broker.execution.paper_adapter import PaperAdapter
 from broker.models.order import OrderPreview
 from broker.models.paper_trade import PaperTrade
 from broker.models.price_bar import PriceBar
@@ -105,6 +107,15 @@ def _agent_control(db: Session) -> AgentControl | None:
     return db.scalars(select(AgentControl).where(AgentControl.scope == "global")).first()
 
 
+def get_broker_adapter() -> BrokerAdapter:
+    """Always returns the paper adapter today. IBKRAdapter exists (execution/ibkr_adapter.py)
+    but this factory never selects it — Phase 4 wiring, when it lands, will branch on
+    preview.execution_mode / settings.enable_live_trading here, not scatter that check
+    through the approval flow. Until then, this is the only place that could route to
+    live execution, and it deliberately doesn't."""
+    return PaperAdapter()
+
+
 def build_portfolio_state(db: Session) -> PortfolioState:
     open_trades = db.scalars(select(PaperTrade).where(PaperTrade.status == "open")).all()
     sectors = _sectors_for(db, {t.ticker for t in open_trades})
@@ -188,7 +199,7 @@ def build_risk_context(
         autonomy_mode=control.autonomy_mode if control else "preview_required",
         is_killed=control.is_killed if control else False,
         kill_reason=control.killed_reason if control else None,
-        earnings_date=None,  # earnings calendar ingestion is not built yet
+        earnings_date=fetch_next_earnings_date(ticker),
         today=date.today(),
         avg_daily_volume=_avg_daily_volume(db, ticker),
         recent_rejections=_recent_rejections(db, ticker),
@@ -335,6 +346,7 @@ def approve_preview(db: Session, preview_id: int, approved_by: str = "human") ->
 
     avg_daily_volume = _avg_daily_volume(db, preview.ticker)
     open_trade: PaperTrade | None = None
+    adapter = get_broker_adapter()
 
     if preview.action == "SELL":
         open_trade = db.scalars(
@@ -348,12 +360,14 @@ def approve_preview(db: Session, preview_id: int, approved_by: str = "human") ->
         # Exits don't partial-fill in this model — PaperTrade can't represent a position
         # closed across two exit prices/dates without splitting the trade row. They can
         # still be rejected outright for an illiquid ticker.
-        fill: FillResult = simulate_fill(
-            preview.action, preview.limit_price, open_trade.shares, avg_daily_volume, allow_partial=False
+        fill: FillResult = adapter.submit_order(
+            preview.action, preview.ticker, preview.limit_price, open_trade.shares, avg_daily_volume,
+            allow_partial=False,
         )
     else:
-        fill = simulate_fill(
-            preview.action, preview.limit_price, preview.shares, avg_daily_volume, allow_partial=True
+        fill = adapter.submit_order(
+            preview.action, preview.ticker, preview.limit_price, preview.shares, avg_daily_volume,
+            allow_partial=True,
         )
 
     if fill.status == "rejected":

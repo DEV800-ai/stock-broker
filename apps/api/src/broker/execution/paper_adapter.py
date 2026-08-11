@@ -12,17 +12,8 @@ Next-bar fill (waiting for the following bar's price) is not modeled either:
 this simulator only ever prices at approval time and has no notion of a
 "next bar" relative to that instant.
 """
-from dataclasses import dataclass
-
 from broker.config import settings
-
-
-@dataclass
-class FillResult:
-    status: str  # "filled" | "partial" | "rejected"
-    filled_shares: int
-    fill_price: float | None  # None when rejected
-    theoretical_price: float  # the old exact-limit-price model, for comparison
+from broker.execution.base import BrokerAdapter, FillResult
 
 
 def simulate_fill(
@@ -51,3 +42,18 @@ def simulate_fill(
 
     status = "filled" if filled_shares == requested_shares else "partial"
     return FillResult(status=status, filled_shares=filled_shares, fill_price=fill_price, theoretical_price=theoretical_price)
+
+
+class PaperAdapter(BrokerAdapter):
+    """BrokerAdapter implementation backing paper trading. See execution/base.py."""
+
+    def submit_order(
+        self,
+        action: str,
+        ticker: str,
+        limit_price: float,
+        requested_shares: int,
+        avg_daily_volume: float | None,
+        allow_partial: bool,
+    ) -> FillResult:
+        return simulate_fill(action, limit_price, requested_shares, avg_daily_volume, allow_partial=allow_partial)

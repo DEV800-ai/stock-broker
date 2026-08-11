@@ -49,7 +49,7 @@ npm run dev
 
 ## Key rules
 
-- **No live trading code until Phase 4.** paper_trades.status is gated — pending_approval → open only after human approval.
+- **No live trading code until Phase 4.** paper_trades.status is gated — pending_approval → open only after human approval. Order execution goes through `BrokerAdapter` (`broker/execution/base.py`); `orders/service.py::get_broker_adapter()` always returns `PaperAdapter` today. `execution/ibkr_adapter.py::IBKRAdapter` exists as a structural placeholder only — its `submit_order` always raises, never call `IBKRClient.place_order` directly from anywhere in the approval path.
 - **No buy/sell recommendations** in any API response. Thesis describes, never directs.
 - **Claude API calls are always logged** to agent_runs table. Never fire-and-forget.
 - **Thesis caching:** check agent_runs.input_hash (SHA256 of ticker+date+signals) before generating. Never regenerate the same thesis.

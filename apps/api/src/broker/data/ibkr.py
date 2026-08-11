@@ -167,6 +167,14 @@ class IBKRClient:
         except Exception:
             return []
 
+    def get_ledger(self, account_id: str) -> dict:
+        """Cash balances and net liquidation value, keyed by currency ("BASE" is the
+        account's base-currency summary)."""
+        try:
+            return self._get(f"/portfolio/{account_id}/ledger")
+        except Exception:
+            return {}
+
     # ------------------------------------------------------------------
     # Orders (paper trading — Phase 3)
     # ------------------------------------------------------------------

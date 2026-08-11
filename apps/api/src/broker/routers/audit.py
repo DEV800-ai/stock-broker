@@ -5,10 +5,26 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from broker.audit.service import verify_chain
 from broker.db import get_db
 from broker.models.audit import AuditLog
 
 router = APIRouter()
+
+
+class AuditChainVerificationOut(BaseModel):
+    ok: bool
+    checked: int
+    broken_at_id: int | None
+    reason: str | None
+
+
+@router.get("/audit/verify", response_model=AuditChainVerificationOut)
+def verify_audit_chain(db: Session = Depends(get_db)) -> AuditChainVerificationOut:
+    result = verify_chain(db)
+    return AuditChainVerificationOut(
+        ok=result.ok, checked=result.checked, broken_at_id=result.broken_at_id, reason=result.reason
+    )
 
 
 class AuditLogOut(BaseModel):
