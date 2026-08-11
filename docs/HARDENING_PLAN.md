@@ -55,9 +55,9 @@ These map to the architecture review's "Immediate PRs" and the red-team's P0 blo
 ## Phase 4 (live trading) — unchanged scope, now with explicit gate criteria
 
 From `CLAUDE.md`: "Human-approved live trading via IBKR." Add to the existing gate:
-- [ ] Must not ship until the Phase 3→4 gate above is fully checked off.
-- [ ] Must not ship until paper trading has run for a meaningful stretch (weeks, not days) with the *upgraded* fill model and no risk-engine bugs found (per `SIGNAL_ALPHA_DESIGN.md` Milestone E).
-- [ ] Explicit "you are about to place a REAL order" confirmation UX; IBKR paper account for staging before real money.
+- [x] Must not ship until the Phase 3→4 gate above is fully checked off. — All three items above are now `[x]`.
+- [ ] Must not ship until paper trading has run for a meaningful stretch (weeks, not days) with the *upgraded* fill model and no risk-engine bugs found (per `SIGNAL_ALPHA_DESIGN.md` Milestone E). **Not satisfiable by code** — this requires real elapsed time running the paper system, not implementation work. To make that evidence easy to check as time passes, added `GET /api/v1/reports/paper-trading-health` (`reports/paper_trading_health.py`): aggregates `order_previews`/`risk_evaluations`/`paper_trades` (optionally filtered by `since=`) into status/verdict/fill-status distributions, closed-trade win rate, avg P&L%, avg entry slippage vs. the theoretical (naive limit-price) fill, and `days_of_history` (time since earliest recorded activity) — the last one being the direct measure against this gate's "weeks, not days" bar. Read-only, not part of any order/risk decision path. Verified against the real dev DB: aggregation counts/win-rate/avg-pnl/avg-slippage all correct against known synthetic rows (created and cleaned up in the same test); `since=` filtering excludes rows correctly; confirmed end-to-end through the running dev server with `X-API-Key` auth.
+- [ ] Explicit "you are about to place a REAL order" confirmation UX; IBKR paper account for staging before real money. **Deliberately not started** — this is the first actual live-execution build item (would mean implementing `IBKRAdapter.submit_order` for real), and per `CLAUDE.md` ("No live trading code until Phase 4") plus the still-unmet gate above, we're holding off rather than overriding the gate the project itself defined. Revisit once the paper-trading track record above is actually established.
 
 ## Phase 5 (limited automation) — no change, notes only
 

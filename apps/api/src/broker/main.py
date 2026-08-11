@@ -2,7 +2,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from broker.auth import require_actor
-from broker.routers import audit, health, orders, paper_trades, scanner, thesis, universe, watchlist
+from broker.routers import audit, health, orders, paper_trades, reports, scanner, thesis, universe, watchlist
 
 app = FastAPI(title="Stock Broker API", version="0.1.0")
 
@@ -25,3 +25,4 @@ app.include_router(thesis.router, prefix=PREFIX, tags=["thesis"], dependencies=A
 app.include_router(paper_trades.router, prefix=PREFIX, tags=["paper-trades"], dependencies=AUTH)
 app.include_router(orders.router, prefix=PREFIX, tags=["orders"], dependencies=AUTH)
 app.include_router(audit.router, prefix=PREFIX, tags=["audit"], dependencies=AUTH)
+app.include_router(reports.router, prefix=PREFIX, tags=["reports"], dependencies=AUTH)
