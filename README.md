@@ -4,6 +4,13 @@ AI-powered stock scanning and research assistant. Scans a universe of stocks dai
 
 > **Phase status:** Phase 1 (scanner + watchlist) and Phase 2 (AI thesis) are complete. Phase 3 (paper trading) is scaffolded. No live trading is active.
 
+## Deployment
+
+Deployed on Railway, auto-deploying from `master`:
+
+- Web: https://stock-broker.up.railway.app
+- API: https://stock-broker-api.up.railway.app
+
 ---
 
 ## Architecture
