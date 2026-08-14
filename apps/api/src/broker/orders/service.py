@@ -27,6 +27,8 @@ from broker.models.universe import StockUniverse
 from broker.risk.engine import evaluate as evaluate_risk
 from broker.risk.types import PortfolioState, RiskContext, RiskPolicyParams, TradeProposal
 
+EXECUTION_MODES = ("paper", "manual_tradingview")
+
 
 class OrderPreviewNotFound(Exception):
     pass
@@ -86,6 +88,19 @@ def _avg_daily_volume(db: Session, ticker: str, days: int = 20) -> float | None:
 def _sector(db: Session, ticker: str) -> str | None:
     row = db.scalars(select(StockUniverse).where(StockUniverse.ticker == ticker)).first()
     return row.sector if row else None
+
+
+def _exchange(db: Session, ticker: str) -> str | None:
+    row = db.scalars(select(StockUniverse).where(StockUniverse.ticker == ticker)).first()
+    return row.exchange if row else None
+
+
+def tradingview_url(db: Session, ticker: str) -> str:
+    """Deep-links to the chart only — TradingView has no documented way to prefill an
+    order ticket (side/qty/price) from an external URL, so the caller must display the
+    preview's order details separately for the user to copy/retype in TradingView."""
+    exchange = _exchange(db, ticker) or "NASDAQ"
+    return f"https://www.tradingview.com/chart/?symbol={exchange}:{ticker}"
 
 
 def _sectors_for(db: Session, tickers: set[str]) -> dict[str, str]:
@@ -239,10 +254,13 @@ def create_preview(
     limit_price: float | None = None,
     order_type: str = "LIMIT",
     time_in_force: str = "DAY",
+    execution_mode: str = "paper",
 ) -> OrderPreview:
     ticker = ticker.upper()
     if action not in ("BUY", "SELL"):
         raise InvalidOrderRequest(f"action must be BUY or SELL, got {action!r}")
+    if execution_mode not in EXECUTION_MODES:
+        raise InvalidOrderRequest(f"execution_mode must be one of {EXECUTION_MODES}, got {execution_mode!r}")
 
     if limit_price is None:
         limit_price = _latest_price(db, ticker)
@@ -277,6 +295,7 @@ def create_preview(
         portfolio_impact=_describe_portfolio_impact(ctx),
         risk_status=evaluation.verdict,
         approval_required=True,
+        execution_mode=execution_mode,
         status="blocked" if evaluation.verdict == "blocked" else "pending",
     )
     db.add(preview)
@@ -343,6 +362,23 @@ def approve_preview(db: Session, preview_id: int, approved_by: str = "human") ->
         )
         db.commit()
         raise PreviewBlockedAtApproval(reevaluation.verdict)
+
+    if preview.execution_mode == "manual_tradingview":
+        # No simulated fill: this preview is headed to a human manually trading in
+        # TradingView, not the paper fill simulator. The resulting position (if any) is
+        # recorded later via manual_execution.service.record_outcome, once the user
+        # reports back what actually happened.
+        preview.status = "approved"
+        preview.approved_by = approved_by
+        preview.approved_at = datetime.utcnow()
+        audit_log(
+            db, actor=approved_by, action="approve_order_manual_tradingview",
+            entity_type="order_preview", entity_id=preview.id,
+            details={"ticker": preview.ticker, "action": preview.action, "shares": preview.shares},
+        )
+        db.commit()
+        db.refresh(preview)
+        return preview
 
     avg_daily_volume = _avg_daily_volume(db, preview.ticker)
     open_trade: PaperTrade | None = None

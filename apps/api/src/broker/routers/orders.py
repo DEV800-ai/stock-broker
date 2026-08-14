@@ -5,7 +5,8 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from broker.auth import require_human_actor
+from broker.audit.service import log as audit_log
+from broker.auth import require_actor, require_human_actor
 from broker.db import get_db
 from broker.models.order import OrderPreview
 from broker.orders import service
@@ -51,6 +52,11 @@ class CreateOrderPreviewRequest(BaseModel):
     limit_price: float | None = None
     order_type: str = "LIMIT"
     time_in_force: str = "DAY"
+    execution_mode: str = "paper"  # paper|manual_tradingview
+
+
+class OpenTradingViewOut(BaseModel):
+    url: str
 
 
 @router.post("/orders/preview", response_model=OrderPreviewDetailOut, status_code=201)
@@ -67,6 +73,7 @@ def preview_order(body: CreateOrderPreviewRequest, db: Session = Depends(get_db)
             limit_price=body.limit_price,
             order_type=body.order_type,
             time_in_force=body.time_in_force,
+            execution_mode=body.execution_mode,
         )
     except service.InvalidOrderRequest as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -75,6 +82,22 @@ def preview_order(body: CreateOrderPreviewRequest, db: Session = Depends(get_db)
         **OrderPreviewOut.model_validate(preview).model_dump(),
         "risk_results": service.get_risk_results(db, preview.id),
     }
+
+
+@router.post("/orders/{preview_id}/open-tradingview", response_model=OpenTradingViewOut)
+def open_tradingview(
+    preview_id: int, db: Session = Depends(get_db), actor: str = Depends(require_actor)
+) -> dict:
+    preview = db.get(OrderPreview, preview_id)
+    if not preview:
+        raise HTTPException(status_code=404, detail="Order preview not found")
+    url = service.tradingview_url(db, preview.ticker)
+    audit_log(
+        db, actor=actor, action="tradingview_open", entity_type="order_preview", entity_id=preview.id,
+        details={"ticker": preview.ticker, "url": url},
+    )
+    db.commit()
+    return {"url": url}
 
 
 @router.get("/orders/queue", response_model=list[OrderPreviewOut])

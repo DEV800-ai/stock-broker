@@ -6,6 +6,7 @@ from broker.routers import (
     agent_control,
     audit,
     health,
+    manual_execution,
     orders,
     paper_trades,
     reports,
@@ -35,6 +36,7 @@ app.include_router(watchlist.router, prefix=PREFIX, tags=["watchlist"], dependen
 app.include_router(thesis.router, prefix=PREFIX, tags=["thesis"], dependencies=AUTH)
 app.include_router(paper_trades.router, prefix=PREFIX, tags=["paper-trades"], dependencies=AUTH)
 app.include_router(orders.router, prefix=PREFIX, tags=["orders"], dependencies=AUTH)
+app.include_router(manual_execution.router, prefix=PREFIX, tags=["manual-execution"], dependencies=AUTH)
 app.include_router(audit.router, prefix=PREFIX, tags=["audit"], dependencies=AUTH)
 app.include_router(reports.router, prefix=PREFIX, tags=["reports"], dependencies=AUTH)
 app.include_router(agent_control.router, prefix=PREFIX, tags=["agent-control"], dependencies=AUTH)

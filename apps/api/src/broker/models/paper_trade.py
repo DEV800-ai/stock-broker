@@ -41,3 +41,14 @@ class PaperTrade(Base):
 
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    # paper (default, simulated fill via execution/paper_adapter.py) | manual_tradingview
+    # (human-reported outcome from manually trading in TradingView — see
+    # manual_execution/service.py). Distinguishes rows in reporting without a schema fork,
+    # since both share the same pending_approval/open/closed lifecycle.
+    source: Mapped[str] = mapped_column(String(20), default="paper")
+    reported_by: Mapped[str | None] = mapped_column(String(100))
+    execution_notes: Mapped[str | None] = mapped_column(Text)
+    # executed|executed_with_changes|rejected|watch_only|paper_tracked|cancelled.
+    # Only set for source="manual_tradingview" rows.
+    outcome: Mapped[str | None] = mapped_column(String(30))
