@@ -1,0 +1,1 @@
+web: PYTHONPATH=src python -c "import os, sys; sys.path = [p for p in sys.path if p not in ('', os.getcwd())]; from alembic.config import main; main(['upgrade', 'head'])" && PYTHONPATH=src python -m uvicorn broker.main:app --host 0.0.0.0 --port $PORT
