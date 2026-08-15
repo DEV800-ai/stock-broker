@@ -316,6 +316,17 @@ def create_preview(
     return preview
 
 
+def list_awaiting_manual_confirmation(db: Session) -> list[OrderPreview]:
+    return list(
+        db.scalars(
+            select(OrderPreview)
+            .where(OrderPreview.execution_mode == "manual_tradingview")
+            .where(OrderPreview.status == "approved")
+            .order_by(OrderPreview.approved_at)
+        )
+    )
+
+
 def get_risk_results(db: Session, preview_id: int) -> list[dict] | None:
     record = db.scalars(
         select(RiskEvaluationRecord)

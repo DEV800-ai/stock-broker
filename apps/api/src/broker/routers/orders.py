@@ -110,6 +110,11 @@ def list_queue(db: Session = Depends(get_db)) -> list[OrderPreview]:
     )
 
 
+@router.get("/orders/awaiting-confirmation", response_model=list[OrderPreviewOut])
+def list_awaiting_confirmation(db: Session = Depends(get_db)) -> list[OrderPreview]:
+    return service.list_awaiting_manual_confirmation(db)
+
+
 @router.get("/orders/{preview_id}", response_model=OrderPreviewDetailOut)
 def get_order_preview(preview_id: int, db: Session = Depends(get_db)) -> dict:
     preview = db.get(OrderPreview, preview_id)

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import { TradingViewWidget } from "@/components/tradingview-widget";
-import type { OrderPreview } from "@/types";
+import type { ManualExecutionOutcome, OrderPreview } from "@/types";
 
 interface CreateForm {
   ticker: string;
@@ -46,7 +46,37 @@ const STATUS_BADGE: Record<string, string> = {
   approved: "bg-green-100 text-green-800",
   rejected: "bg-zinc-100 text-zinc-600",
   expired: "bg-zinc-100 text-zinc-600",
+  manual_recorded: "bg-zinc-100 text-zinc-600",
 };
+
+const OUTCOMES: { value: ManualExecutionOutcome; label: string }[] = [
+  { value: "executed", label: "Executed as previewed" },
+  { value: "executed_with_changes", label: "Executed with changes" },
+  { value: "rejected", label: "Rejected in TradingView" },
+  { value: "watch_only", label: "Watch only — no trade" },
+  { value: "paper_tracked", label: "Tracking as paper only" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
+const POSITION_OUTCOMES: ManualExecutionOutcome[] = ["executed", "executed_with_changes"];
+
+interface OutcomeForm {
+  outcome: ManualExecutionOutcome;
+  actual_price: string;
+  actual_quantity: string;
+  actual_order_type: string;
+  notes: string;
+}
+
+function emptyOutcomeForm(p: OrderPreview): OutcomeForm {
+  return {
+    outcome: "executed",
+    actual_price: String(p.limit_price),
+    actual_quantity: String(p.shares),
+    actual_order_type: p.order_type,
+    notes: "",
+  };
+}
 
 function orderDetailText(p: OrderPreview): string {
   return [
@@ -66,9 +96,16 @@ export default function OrdersPage() {
   const [tvPreview, setTvPreview] = useState<OrderPreview | null>(null);
   const [copied, setCopied] = useState(false);
   const [chartId, setChartId] = useState<number | null>(null);
+  const [awaiting, setAwaiting] = useState<OrderPreview[]>([]);
+  const [awaitChartId, setAwaitChartId] = useState<number | null>(null);
+  const [outcomePreview, setOutcomePreview] = useState<OrderPreview | null>(null);
+  const [outcomeForm, setOutcomeForm] = useState<OutcomeForm | null>(null);
+  const [outcomeSubmitting, setOutcomeSubmitting] = useState(false);
+  const [outcomeError, setOutcomeError] = useState<string | null>(null);
 
   function load() {
     api.orderQueue().then(setPreviews).catch(console.error);
+    api.ordersAwaitingConfirmation().then(setAwaiting).catch(console.error);
   }
 
   useEffect(() => { load(); }, []);
@@ -98,6 +135,35 @@ export default function OrdersPage() {
     if (!tvPreview) return;
     await navigator.clipboard.writeText(orderDetailText(tvPreview));
     setCopied(true);
+  }
+
+  function openOutcome(p: OrderPreview) {
+    setOutcomeError(null);
+    setOutcomePreview(p);
+    setOutcomeForm(emptyOutcomeForm(p));
+  }
+
+  async function submitOutcome() {
+    if (!outcomePreview || !outcomeForm) return;
+    setOutcomeSubmitting(true);
+    setOutcomeError(null);
+    try {
+      const isPosition = POSITION_OUTCOMES.includes(outcomeForm.outcome);
+      await api.recordManualExecution(outcomePreview.id, {
+        outcome: outcomeForm.outcome,
+        actual_price: isPosition && outcomeForm.actual_price ? parseFloat(outcomeForm.actual_price) : undefined,
+        actual_quantity: isPosition && outcomeForm.actual_quantity ? parseInt(outcomeForm.actual_quantity) : undefined,
+        actual_order_type: isPosition ? outcomeForm.actual_order_type || undefined : undefined,
+        notes: outcomeForm.notes || undefined,
+      });
+      setOutcomePreview(null);
+      setOutcomeForm(null);
+      load();
+    } catch (err) {
+      setOutcomeError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOutcomeSubmitting(false);
+    }
   }
 
   async function submitCreate() {
@@ -157,6 +223,47 @@ export default function OrdersPage() {
           ))}
         </div>
       )}
+
+      <div className="space-y-2">
+        <h2 className="text-sm font-semibold text-zinc-700">Awaiting Manual Confirmation</h2>
+        {awaiting.length === 0 ? (
+          <p className="text-sm text-zinc-400">No previews awaiting manual execution confirmation.</p>
+        ) : (
+          <div className="rounded-md border border-zinc-200 bg-white divide-y divide-zinc-100">
+            {awaiting.map((p) => (
+              <div key={p.id}>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+                  <div className="flex items-center gap-2 min-w-[140px]">
+                    <span className="font-semibold text-sm">{p.ticker}</span>
+                    <span className="text-xs text-zinc-500">{p.action}</span>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[p.status] ?? ""}`}>
+                      {p.status}
+                    </span>
+                  </div>
+                  <div className="flex gap-4 text-xs text-zinc-500 flex-1">
+                    <span>{p.shares} sh</span>
+                    <span>{p.order_type} @ ${p.limit_price.toFixed(2)}</span>
+                    <span>{p.time_in_force}</span>
+                  </div>
+                  <div className="flex gap-2 ml-auto">
+                    <Button size="sm" variant="outline"
+                      onClick={() => setAwaitChartId((cur) => (cur === p.id ? null : p.id))}>
+                      {awaitChartId === p.id ? "Hide Chart" : "Chart"}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => openTradingView(p)}>Open in TradingView</Button>
+                    <Button size="sm" onClick={() => openOutcome(p)}>Record Outcome</Button>
+                  </div>
+                </div>
+                {awaitChartId === p.id && (
+                  <div className="px-4 pb-4">
+                    <TradingViewWidget symbol={p.ticker} height={320} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-md">
@@ -235,6 +342,55 @@ export default function OrdersPage() {
               <Button size="sm" variant="outline" onClick={copyOrderDetail}>
                 {copied ? "Copied!" : "Copy order details"}
               </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!outcomePreview} onOpenChange={(o) => { if (!o) { setOutcomePreview(null); setOutcomeForm(null); } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Record Outcome — {outcomePreview?.ticker}</DialogTitle>
+          </DialogHeader>
+          {outcomeForm && (
+            <div className="space-y-3 mt-2">
+              <Field label="Outcome" required>
+                <select className={inputCls} value={outcomeForm.outcome}
+                  onChange={(e) => setOutcomeForm((f) => f && ({ ...f, outcome: e.target.value as ManualExecutionOutcome }))}>
+                  {OUTCOMES.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              {POSITION_OUTCOMES.includes(outcomeForm.outcome) && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Actual price ($)">
+                      <input type="number" step="0.01" className={inputCls} value={outcomeForm.actual_price}
+                        onChange={(e) => setOutcomeForm((f) => f && ({ ...f, actual_price: e.target.value }))} />
+                    </Field>
+                    <Field label="Actual quantity">
+                      <input type="number" min="1" className={inputCls} value={outcomeForm.actual_quantity}
+                        onChange={(e) => setOutcomeForm((f) => f && ({ ...f, actual_quantity: e.target.value }))} />
+                    </Field>
+                  </div>
+                  <Field label="Actual order type">
+                    <input className={inputCls} value={outcomeForm.actual_order_type}
+                      onChange={(e) => setOutcomeForm((f) => f && ({ ...f, actual_order_type: e.target.value }))} />
+                  </Field>
+                </>
+              )}
+              <Field label="Notes">
+                <textarea rows={2} className={inputCls} value={outcomeForm.notes}
+                  onChange={(e) => setOutcomeForm((f) => f && ({ ...f, notes: e.target.value }))} />
+              </Field>
+              {outcomeError && <p className="text-xs text-red-600">{outcomeError}</p>}
+              <div className="flex gap-2 pt-1">
+                <Button className="flex-1" disabled={outcomeSubmitting} onClick={submitOutcome}>
+                  {outcomeSubmitting ? "Submitting…" : "Record Outcome"}
+                </Button>
+                <Button variant="outline" onClick={() => { setOutcomePreview(null); setOutcomeForm(null); }}>Cancel</Button>
+              </div>
             </div>
           )}
         </DialogContent>

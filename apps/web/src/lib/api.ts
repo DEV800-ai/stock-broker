@@ -1,5 +1,7 @@
 import type {
   HealthStatus,
+  ManualExecutionOutcome,
+  ManualExecutionResult,
   OrderPreview,
   OrderPreviewDetail,
   PaperTrade,
@@ -131,4 +133,21 @@ export const api = {
 
   openOrderInTradingView: (id: number) =>
     apiFetch<{ url: string }>(`/api/v1/orders/${id}/open-tradingview`, { method: "POST" }),
+
+  ordersAwaitingConfirmation: () => apiFetch<OrderPreview[]>("/api/v1/orders/awaiting-confirmation"),
+
+  recordManualExecution: (
+    id: number,
+    body: {
+      outcome: ManualExecutionOutcome;
+      actual_price?: number;
+      actual_quantity?: number;
+      actual_order_type?: string;
+      notes?: string;
+    }
+  ) =>
+    apiFetch<ManualExecutionResult>(`/api/v1/manual-execution/${id}`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 };

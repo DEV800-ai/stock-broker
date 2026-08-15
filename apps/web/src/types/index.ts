@@ -5,7 +5,14 @@ export type PaperTradeStatus = "pending_approval" | "open" | "closed" | "rejecte
 export type OrderAction = "BUY" | "SELL";
 export type OrderExecutionMode = "paper" | "manual_tradingview";
 export type OrderRiskStatus = "approved" | "warning" | "blocked";
-export type OrderPreviewStatus = "pending" | "blocked" | "approved" | "rejected" | "expired";
+export type OrderPreviewStatus = "pending" | "blocked" | "approved" | "rejected" | "expired" | "manual_recorded";
+export type ManualExecutionOutcome =
+  | "executed"
+  | "executed_with_changes"
+  | "rejected"
+  | "watch_only"
+  | "paper_tracked"
+  | "cancelled";
 
 export interface HealthStatus {
   status: string;
@@ -101,6 +108,14 @@ export interface OrderPreview {
 
 export interface OrderPreviewDetail extends OrderPreview {
   risk_results: Record<string, unknown>[] | null;
+}
+
+export interface ManualExecutionResult {
+  id: number;
+  ticker: string;
+  status: OrderPreviewStatus;
+  execution_mode: OrderExecutionMode;
+  paper_trade_id: number | null;
 }
 
 export interface PaperTrade {
