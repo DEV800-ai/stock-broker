@@ -38,8 +38,11 @@ npm install
 npm run dev
 ```
 
-## IBKR Gateway (required for market data)
+## IBKR Gateway (Phase 4 live-trading placeholder only — not required for scans/theses/orders)
 
+Market data (scans, prices, order-preview `limit_price` lookups) runs entirely on yfinance (`broker/data/yfinance_data.py`) and does not touch IBKR. IBKR Gateway is only needed for the future Phase 4 live-trading path (`execution/ibkr_adapter.py`, currently a no-op placeholder) and for `portfolio/ibkr_provider.py` (also unwired today). You do not need it running to develop or run scans/watchlist/theses/order previews locally.
+
+If/when working on Phase 4 live trading:
 1. Download IBKR Client Portal Gateway from interactivebrokers.com
 2. Run: `java -jar clientportal.gw/root/run.sh`
 3. Log in at https://localhost:5000 (browser, requires 2FA)

@@ -13,7 +13,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ErrorAlert } from "@/components/error-alert";
+import { ThesisView } from "@/components/thesis-view";
 import { api } from "@/lib/api";
+import { generateAndPollThesis } from "@/lib/thesis";
 import type { StockThesis, WatchlistEntry } from "@/types";
 
 interface TradeForm {
@@ -33,12 +35,6 @@ const STATUS_VARIANTS: Record<string, BadgeVariant> = {
   avoid: "destructive",
 };
 
-const CONFIDENCE_VARIANTS: Record<string, BadgeVariant> = {
-  high: "success",
-  medium: "warning",
-  low: "outline",
-};
-
 const THESIS_MIN_SCORE = 0.50;
 
 export default function WatchlistPage() {
@@ -47,6 +43,7 @@ export default function WatchlistPage() {
   const [thesisOpen, setThesisOpen] = useState(false);
   const [loadingThesis, setLoadingThesis] = useState(false);
   const [generatingTickers, setGeneratingTickers] = useState<Set<string>>(new Set());
+  const [thesisGenError, setThesisGenError] = useState<{ ticker: string; message: string } | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [tradeEntry, setTradeEntry] = useState<WatchlistEntry | null>(null);
   const [tradeForm, setTradeForm] = useState<TradeForm>({ entry_price: "", target_price: "", stop_price: "", shares: "1", notes: "" });
@@ -74,31 +71,31 @@ export default function WatchlistPage() {
   }
 
   async function generateThesis(entry: WatchlistEntry) {
+    setThesisGenError(null);
     setGeneratingTickers((prev) => new Set(prev).add(entry.ticker));
-    try {
-      await api.generateThesis(entry.ticker, entry.scan_result_id ?? undefined);
-      // Poll until thesis_id appears on the entry (generation runs in background)
-      let attempts = 0;
-      const poll = setInterval(async () => {
-        attempts++;
-        const fresh = await api.watchlist({ limit: 50 });
-        const updated = fresh.find((e) => e.ticker === entry.ticker);
-        if (updated?.thesis_id || attempts >= 30) {
-          clearInterval(poll);
-          setEntries(fresh);
-          setGeneratingTickers((prev) => {
-            const next = new Set(prev);
-            next.delete(entry.ticker);
-            return next;
-          });
-        }
-      }, 2000);
-    } catch {
+    const stopGenerating = () => {
       setGeneratingTickers((prev) => {
         const next = new Set(prev);
         next.delete(entry.ticker);
         return next;
       });
+    };
+    try {
+      await generateAndPollThesis({
+        ticker: entry.ticker,
+        scanResultId: entry.scan_result_id ?? undefined,
+        onDone: () => {
+          stopGenerating();
+          loadEntries();
+        },
+        onTimeout: () => {
+          stopGenerating();
+          setThesisGenError({ ticker: entry.ticker, message: "Thesis generation didn't complete — the score may be below the auto-thesis threshold, or generation failed. Try again shortly." });
+        },
+      });
+    } catch (err) {
+      stopGenerating();
+      setThesisGenError({ ticker: entry.ticker, message: err instanceof Error ? err.message : String(err) });
     }
   }
 
@@ -170,6 +167,7 @@ export default function WatchlistPage() {
               onGenerateThesis={generateThesis}
               onCreateTrade={openTradeDialog}
               generating={generatingTickers.has(entry.ticker)}
+              error={thesisGenError?.ticker === entry.ticker ? thesisGenError.message : null}
             />
           ))}
         </div>
@@ -251,12 +249,14 @@ function WatchlistCard({
   onGenerateThesis,
   onCreateTrade,
   generating,
+  error,
 }: {
   entry: WatchlistEntry;
   onViewThesis: (e: WatchlistEntry) => void;
   onGenerateThesis: (e: WatchlistEntry) => void;
   onCreateTrade: (e: WatchlistEntry) => void;
   generating: boolean;
+  error?: string | null;
 }) {
   const scorePercent = Math.round((entry.composite_score ?? 0) * 100);
   const eligible = !entry.thesis_id && (entry.composite_score ?? 0) >= THESIS_MIN_SCORE;
@@ -305,45 +305,8 @@ function WatchlistCard({
             </Button>
           )}
         </div>
+        {error && <ErrorAlert message={error} />}
       </CardContent>
     </Card>
-  );
-}
-
-function ThesisView({ thesis }: { thesis: StockThesis }) {
-  return (
-    <>
-      <DialogHeader>
-        <div className="flex items-center gap-3">
-          <DialogTitle className="font-mono text-lg">{thesis.ticker}</DialogTitle>
-          {thesis.confidence && (
-            <Badge variant={CONFIDENCE_VARIANTS[thesis.confidence] ?? "outline"}>
-              {thesis.confidence.toUpperCase()} CONFIDENCE
-            </Badge>
-          )}
-        </div>
-        <p className="font-mono text-xs text-muted-foreground">
-          Generated {new Date(thesis.generated_at).toLocaleString()} · {thesis.model}
-        </p>
-      </DialogHeader>
-
-      <div className="space-y-4 mt-4">
-        <Section title="Why Interesting" content={thesis.why_interesting} />
-        <Section title="Risk Factors" content={thesis.risk_factors} />
-        {thesis.sector_context && <Section title="Sector Context" content={thesis.sector_context} />}
-        {thesis.news_summary && <Section title="News Summary" content={thesis.news_summary} />}
-        {thesis.catalysts && <Section title="Catalysts" content={thesis.catalysts} />}
-        {thesis.peer_comparison && <Section title="Peer Comparison" content={thesis.peer_comparison} />}
-      </div>
-    </>
-  );
-}
-
-function Section({ title, content }: { title: string; content: string }) {
-  return (
-    <div>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">{title}</h3>
-      <p className="text-sm leading-relaxed text-foreground">{content}</p>
-    </div>
   );
 }

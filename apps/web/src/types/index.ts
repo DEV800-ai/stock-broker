@@ -17,7 +17,7 @@ export type ManualExecutionOutcome =
 export interface HealthStatus {
   status: string;
   db: boolean;
-  ibkr_gateway: boolean;
+  market_data: boolean;
   ai: boolean;
 }
 
