@@ -76,6 +76,6 @@ PYTHONPATH=src .venv/bin/alembic upgrade head
 
 1. Scanner + watchlist (current)
 2. AI thesis per ticker (current)
-3. Paper trading with human approval
+3. Paper trading with human approval — includes both simulated `PaperAdapter` fills and manual TradingView execution (`execution_mode="manual_tradingview"`: human trades manually, self-reports the outcome via `/manual-execution/{id}`, see `docs/SIGNAL_ALPHA_DESIGN.md` §9)
 4. Human-approved live trading via IBKR
 5. Limited automation with strict guardrails
