@@ -22,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/watchlist" className="hover:text-zinc-900">Watchlist</Link>
               <Link href="/scanner" className="hover:text-zinc-900">Scanner</Link>
               <Link href="/paper-trades" className="hover:text-zinc-900">Paper Trades</Link>
+              <Link href="/orders" className="hover:text-zinc-900">Order Previews</Link>
             </nav>
           </div>
         </header>

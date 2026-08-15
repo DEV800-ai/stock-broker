@@ -2,6 +2,10 @@ export type WatchlistStatus = "watch" | "research" | "paper" | "avoid";
 export type ThesisConfidence = "high" | "medium" | "low";
 export type ScanRunStatus = "running" | "complete" | "failed";
 export type PaperTradeStatus = "pending_approval" | "open" | "closed" | "rejected";
+export type OrderAction = "BUY" | "SELL";
+export type OrderExecutionMode = "paper" | "manual_tradingview";
+export type OrderRiskStatus = "approved" | "warning" | "blocked";
+export type OrderPreviewStatus = "pending" | "blocked" | "approved" | "rejected" | "expired";
 
 export interface HealthStatus {
   status: string;
@@ -70,6 +74,33 @@ export interface StockThesis {
   catalysts: string | null;
   confidence: ThesisConfidence | null;
   news_score: number | null;
+}
+
+export interface OrderPreview {
+  id: number;
+  ticker: string;
+  thesis_id: number | null;
+  action: OrderAction;
+  shares: number;
+  order_type: string;
+  limit_price: number;
+  time_in_force: string;
+  reason: string;
+  bull_case: string | null;
+  bear_case: string | null;
+  portfolio_impact: string | null;
+  risk_status: OrderRiskStatus;
+  approval_required: boolean;
+  status: OrderPreviewStatus;
+  execution_mode: OrderExecutionMode;
+  paper_trade_id: number | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  created_at: string;
+}
+
+export interface OrderPreviewDetail extends OrderPreview {
+  risk_results: Record<string, unknown>[] | null;
 }
 
 export interface PaperTrade {

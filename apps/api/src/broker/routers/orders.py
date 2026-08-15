@@ -30,6 +30,7 @@ class OrderPreviewOut(BaseModel):
     risk_status: str
     approval_required: bool
     status: str
+    execution_mode: str
     paper_trade_id: int | None
     approved_by: str | None
     approved_at: datetime | None

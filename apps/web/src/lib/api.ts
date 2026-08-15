@@ -1,5 +1,7 @@
 import type {
   HealthStatus,
+  OrderPreview,
+  OrderPreviewDetail,
   PaperTrade,
   ScanResult,
   ScanRun,
@@ -99,4 +101,34 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ exit_price, close_reason }),
     }),
+
+  createOrderPreview: (body: {
+    ticker: string;
+    action: string;
+    reason: string;
+    thesis_id?: number;
+    shares?: number;
+    amount_usd?: number;
+    limit_price?: number;
+    order_type?: string;
+    time_in_force?: string;
+    execution_mode?: string;
+  }) =>
+    apiFetch<OrderPreviewDetail>("/api/v1/orders/preview", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  orderQueue: () => apiFetch<OrderPreview[]>("/api/v1/orders/queue"),
+
+  orderPreview: (id: number) => apiFetch<OrderPreviewDetail>(`/api/v1/orders/${id}`),
+
+  approveOrder: (id: number) =>
+    apiFetch<OrderPreview>(`/api/v1/orders/${id}/approve`, { method: "POST" }),
+
+  rejectOrder: (id: number) =>
+    apiFetch<OrderPreview>(`/api/v1/orders/${id}/reject`, { method: "POST" }),
+
+  openOrderInTradingView: (id: number) =>
+    apiFetch<{ url: string }>(`/api/v1/orders/${id}/open-tradingview`, { method: "POST" }),
 };
