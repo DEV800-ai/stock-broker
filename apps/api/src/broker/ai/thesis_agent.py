@@ -4,6 +4,7 @@ import logging
 import time
 from datetime import date, datetime
 
+from openai import OpenAI
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
