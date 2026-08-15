@@ -189,7 +189,7 @@ class ThesisAgent:
         prompt = user_prompt if not retry_note else f"{user_prompt}\n\n{retry_note}"
         response = self._client.chat.completions.create(
             model=settings.openai_model,
-            max_tokens=1024,
+            max_completion_tokens=1024,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": _SYSTEM_PROMPT},
