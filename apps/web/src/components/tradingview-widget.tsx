@@ -28,7 +28,7 @@ export function TradingViewWidget({ symbol, height = 320 }: { symbol: string; he
       height,
       locale: "en",
       dateRange: "3M",
-      colorTheme: "light",
+      colorTheme: "dark",
       isTransparent: false,
       autosize: false,
       hide_side_toolbar: true,

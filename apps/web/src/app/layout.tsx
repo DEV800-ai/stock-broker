@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
-import Link from "next/link";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { NavBar } from "@/components/nav-bar";
 
-const geist = Geist({ subsets: ["latin"] });
+const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
 
 export const metadata: Metadata = {
   title: "Stock Broker",
@@ -12,20 +13,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="h-full antialiased">
-      <body className={`${geist.className} min-h-full bg-zinc-50 text-zinc-900`}>
-        <header className="border-b border-zinc-200 bg-white px-6 py-3">
-          <div className="mx-auto flex max-w-7xl items-center gap-6">
-            <span className="text-sm font-semibold tracking-wide">Stock Broker</span>
-            <nav className="flex gap-4 text-sm text-zinc-500">
-              <Link href="/dashboard" className="hover:text-zinc-900">Dashboard</Link>
-              <Link href="/watchlist" className="hover:text-zinc-900">Watchlist</Link>
-              <Link href="/scanner" className="hover:text-zinc-900">Scanner</Link>
-              <Link href="/paper-trades" className="hover:text-zinc-900">Paper Trades</Link>
-              <Link href="/orders" className="hover:text-zinc-900">Order Previews</Link>
-            </nav>
-          </div>
-        </header>
+    <html lang="en" className="dark h-full antialiased">
+      <body className={`${geist.variable} ${geistMono.variable} min-h-full bg-background font-sans text-foreground`}>
+        <NavBar />
         <main className="mx-auto max-w-7xl px-6 py-8">{children}</main>
       </body>
     </html>

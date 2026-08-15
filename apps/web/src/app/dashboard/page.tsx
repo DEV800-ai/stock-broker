@@ -62,21 +62,21 @@ export default function DashboardPage() {
       {/* Last scan */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm font-medium text-zinc-500">Last Scan</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Last Scan</CardTitle>
         </CardHeader>
         <CardContent>
           {lastRun ? (
             <div className="flex items-center gap-4 text-sm">
-              <Badge variant={lastRun.status === "complete" ? "default" : lastRun.status === "running" ? "secondary" : "destructive"}>
+              <Badge variant={lastRun.status === "complete" ? "success" : lastRun.status === "running" ? "secondary" : "destructive"}>
                 {lastRun.status}
               </Badge>
-              <span className="text-zinc-500">{new Date(lastRun.started_at).toLocaleString()}</span>
+              <span className="font-mono text-muted-foreground">{new Date(lastRun.started_at).toLocaleString()}</span>
               {lastRun.tickers_scanned != null && (
-                <span>{lastRun.tickers_scanned} scanned · {lastRun.tickers_flagged} flagged</span>
+                <span className="font-mono">{lastRun.tickers_scanned} scanned · {lastRun.tickers_flagged} flagged</span>
               )}
             </div>
           ) : (
-            <p className="text-sm text-zinc-400">No scans yet. Trigger a scan to start.</p>
+            <p className="text-sm text-muted-foreground">No scans yet. Trigger a scan to start.</p>
           )}
         </CardContent>
       </Card>
@@ -85,7 +85,7 @@ export default function DashboardPage() {
       {runs.length > 1 && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm font-medium text-zinc-500">Recent Runs</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Recent Runs</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -94,9 +94,9 @@ export default function DashboardPage() {
                   <Badge variant={run.status === "complete" ? "outline" : "secondary"} className="text-xs">
                     {run.status}
                   </Badge>
-                  <span className="text-zinc-400">{new Date(run.started_at).toLocaleString()}</span>
+                  <span className="font-mono text-muted-foreground">{new Date(run.started_at).toLocaleString()}</span>
                   {run.tickers_flagged != null && (
-                    <span className="text-zinc-500">{run.tickers_flagged} flagged</span>
+                    <span className="font-mono text-muted-foreground">{run.tickers_flagged} flagged</span>
                   )}
                 </div>
               ))}
@@ -112,9 +112,9 @@ function StatusTile({ label, ok }: { label: string; ok?: boolean }) {
   return (
     <Card>
       <CardContent className="py-4">
-        <p className="text-xs text-zinc-400">{label}</p>
+        <p className="text-xs text-muted-foreground">{label}</p>
         <div className="mt-1 flex items-center gap-1.5">
-          <span className={`h-2 w-2 rounded-full ${ok === true ? "bg-green-500" : ok === false ? "bg-red-400" : "bg-zinc-300"}`} />
+          <span className={`h-2 w-2 rounded-full ${ok === true ? "bg-emerald-400" : ok === false ? "bg-rose-400" : "bg-muted-foreground/40"}`} />
           <span className="text-sm font-medium">{ok === true ? "Online" : ok === false ? "Offline" : "—"}</span>
         </div>
       </CardContent>
@@ -126,8 +126,8 @@ function StatTile({ label, value }: { label: string; value: string }) {
   return (
     <Card>
       <CardContent className="py-4">
-        <p className="text-xs text-zinc-400">{label}</p>
-        <p className="mt-1 text-sm font-medium">{value}</p>
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="mt-1 font-mono text-sm font-medium">{value}</p>
       </CardContent>
     </Card>
   );

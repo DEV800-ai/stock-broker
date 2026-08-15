@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -27,11 +28,11 @@ export default function ScannerPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Scanner Results</h1>
         <div className="flex items-center gap-2 text-sm">
-          <label className="text-zinc-500">Min score</label>
+          <label className="text-muted-foreground">Min score</label>
           <select
             value={minScore}
             onChange={(e) => setMinScore(Number(e.target.value))}
-            className="rounded border border-zinc-200 px-2 py-1 text-xs"
+            className="rounded border border-border bg-background px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value={0}>All</option>
             <option value={0.3}>0.30+</option>
@@ -42,12 +43,12 @@ export default function ScannerPage() {
       </div>
 
       {results.length === 0 ? (
-        <p className="text-sm text-zinc-400">No scan results yet.</p>
+        <p className="text-sm text-muted-foreground">No scan results yet.</p>
       ) : (
-        <div className="rounded-md border border-zinc-200 bg-white overflow-hidden">
+        <div className="rounded-md border border-border bg-card overflow-hidden">
           <Table>
             <TableHeader>
-              <TableRow className="bg-zinc-50">
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
                 <TableHead>Ticker</TableHead>
                 <TableHead className="text-right">Score</TableHead>
                 <TableHead className="text-right">Volume Ratio</TableHead>
@@ -59,21 +60,21 @@ export default function ScannerPage() {
             </TableHeader>
             <TableBody>
               {results.map((r) => (
-                <TableRow key={r.id} className="hover:bg-zinc-50">
-                  <TableCell className="font-medium">{r.ticker}</TableCell>
-                  <TableCell className="text-right text-sm">
+                <TableRow key={r.id} className="hover:bg-muted/40">
+                  <TableCell className="font-mono font-medium">{r.ticker}</TableCell>
+                  <TableCell className="text-right font-mono text-sm">
                     {r.composite_score != null ? (r.composite_score * 100).toFixed(0) + "%" : "—"}
                   </TableCell>
-                  <TableCell className="text-right text-sm text-zinc-500">
+                  <TableCell className="text-right font-mono text-sm text-muted-foreground">
                     {r.volume_ratio != null ? r.volume_ratio.toFixed(1) + "×" : "—"}
                   </TableCell>
-                  <TableCell className={`text-right text-sm ${(r.pct_change_5d ?? 0) >= 0 ? "text-green-600" : "text-red-500"}`}>
+                  <TableCell className={`text-right font-mono text-sm ${(r.pct_change_5d ?? 0) >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
                     {r.pct_change_5d != null ? (r.pct_change_5d >= 0 ? "+" : "") + r.pct_change_5d.toFixed(1) + "%" : "—"}
                   </TableCell>
-                  <TableCell className="text-right text-sm text-zinc-500">
+                  <TableCell className="text-right font-mono text-sm text-muted-foreground">
                     {r.rsi_14?.toFixed(0) ?? "—"}
                   </TableCell>
-                  <TableCell className="text-right text-sm">
+                  <TableCell className="text-right font-mono text-sm">
                     {r.price != null ? `$${r.price.toFixed(2)}` : "—"}
                   </TableCell>
                   <TableCell>
@@ -82,9 +83,9 @@ export default function ScannerPage() {
                         Object.entries(r.signals_fired)
                           .filter(([, v]) => v)
                           .map(([k]) => (
-                            <span key={k} className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600">
+                            <Badge key={k} variant="outline" className="text-xs font-normal">
                               {k}
-                            </span>
+                            </Badge>
                           ))}
                     </div>
                   </TableCell>

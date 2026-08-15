@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import type { badgeVariants } from "@/components/ui/badge";
+import type { VariantProps } from "class-variance-authority";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -10,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorAlert } from "@/components/error-alert";
 import { api } from "@/lib/api";
 import type { StockThesis, WatchlistEntry } from "@/types";
 
@@ -21,17 +24,19 @@ interface TradeForm {
   notes: string;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  paper: "bg-green-100 text-green-800",
-  research: "bg-blue-100 text-blue-800",
-  watch: "bg-zinc-100 text-zinc-700",
-  avoid: "bg-red-100 text-red-700",
+type BadgeVariant = VariantProps<typeof badgeVariants>["variant"];
+
+const STATUS_VARIANTS: Record<string, BadgeVariant> = {
+  paper: "success",
+  research: "secondary",
+  watch: "outline",
+  avoid: "destructive",
 };
 
-const CONFIDENCE_COLORS: Record<string, string> = {
-  high: "bg-green-100 text-green-800",
-  medium: "bg-yellow-100 text-yellow-800",
-  low: "bg-zinc-100 text-zinc-600",
+const CONFIDENCE_VARIANTS: Record<string, BadgeVariant> = {
+  high: "success",
+  medium: "warning",
+  low: "outline",
 };
 
 const THESIS_MIN_SCORE = 0.50;
@@ -46,6 +51,7 @@ export default function WatchlistPage() {
   const [tradeEntry, setTradeEntry] = useState<WatchlistEntry | null>(null);
   const [tradeForm, setTradeForm] = useState<TradeForm>({ entry_price: "", target_price: "", stop_price: "", shares: "1", notes: "" });
   const [submittingTrade, setSubmittingTrade] = useState(false);
+  const [tradeError, setTradeError] = useState<string | null>(null);
 
   function loadEntries() {
     api.watchlist({ status: statusFilter || undefined, limit: 50 })
@@ -98,6 +104,7 @@ export default function WatchlistPage() {
 
   async function openTradeDialog(entry: WatchlistEntry) {
     setTradeForm({ entry_price: "", target_price: "", stop_price: "", shares: "1", notes: "" });
+    setTradeError(null);
     setTradeEntry(entry);
     try {
       const scan = await api.latestScanResult(entry.ticker);
@@ -110,6 +117,7 @@ export default function WatchlistPage() {
   async function submitTrade() {
     if (!tradeEntry) return;
     setSubmittingTrade(true);
+    setTradeError(null);
     try {
       await api.createPaperTrade({
         ticker: tradeEntry.ticker,
@@ -122,6 +130,8 @@ export default function WatchlistPage() {
       });
       setTradeEntry(null);
       loadEntries();
+    } catch (err) {
+      setTradeError(err instanceof Error ? err.message : String(err));
     } finally {
       setSubmittingTrade(false);
     }
@@ -138,8 +148,8 @@ export default function WatchlistPage() {
               onClick={() => setStatusFilter(s)}
               className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                 statusFilter === s
-                  ? "bg-zinc-900 text-white"
-                  : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/70"
               }`}
             >
               {s === "" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}
@@ -149,7 +159,7 @@ export default function WatchlistPage() {
       </div>
 
       {entries.length === 0 ? (
-        <p className="text-sm text-zinc-400">No watchlist entries yet. Run a scan first.</p>
+        <p className="text-sm text-muted-foreground">No watchlist entries yet. Run a scan first.</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {entries.map((entry) => (
@@ -168,7 +178,7 @@ export default function WatchlistPage() {
       <Dialog open={thesisOpen} onOpenChange={setThesisOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           {loadingThesis ? (
-            <div className="py-8 text-center text-sm text-zinc-400">Loading thesis…</div>
+            <div className="py-8 text-center text-sm text-muted-foreground">Loading thesis…</div>
           ) : thesis ? (
             <ThesisView thesis={thesis} />
           ) : null}
@@ -210,6 +220,7 @@ export default function WatchlistPage() {
                 value={tradeForm.notes}
                 onChange={(e) => setTradeForm((f) => ({ ...f, notes: e.target.value }))} />
             </Field>
+            {tradeError && <ErrorAlert message={tradeError} />}
             <div className="flex gap-2 pt-1">
               <Button className="flex-1" disabled={!tradeForm.entry_price || submittingTrade} onClick={submitTrade}>
                 {submittingTrade ? "Submitting…" : "Submit for Approval"}
@@ -223,12 +234,12 @@ export default function WatchlistPage() {
   );
 }
 
-const inputCls = "w-full rounded-md border border-zinc-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400";
+const inputCls = "w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
 
 function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
   return (
     <div className="space-y-1">
-      <label className="text-xs font-medium text-zinc-500">{label}{required && " *"}</label>
+      <label className="text-xs font-medium text-muted-foreground">{label}{required && " *"}</label>
       {children}
     </div>
   );
@@ -256,23 +267,23 @@ function WatchlistCard({
       <CardContent className="pt-4 pb-3 space-y-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-zinc-400">#{entry.rank}</span>
-            <span className="text-base font-semibold">{entry.ticker}</span>
+            <span className="font-mono text-xs text-muted-foreground">#{entry.rank}</span>
+            <span className="font-mono text-base font-semibold">{entry.ticker}</span>
           </div>
-          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[entry.status] ?? "bg-zinc-100 text-zinc-700"}`}>
+          <Badge variant={STATUS_VARIANTS[entry.status] ?? "outline"}>
             {entry.status.toUpperCase()}
-          </span>
+          </Badge>
         </div>
 
         {/* Score bar */}
         <div>
-          <div className="flex justify-between text-xs text-zinc-400 mb-1">
+          <div className="flex justify-between text-xs text-muted-foreground mb-1">
             <span>Score</span>
-            <span>{scorePercent}%</span>
+            <span className="font-mono">{scorePercent}%</span>
           </div>
-          <div className="h-1.5 w-full rounded-full bg-zinc-100">
+          <div className="h-1.5 w-full rounded-full bg-muted">
             <div
-              className="h-1.5 rounded-full bg-zinc-800 transition-all"
+              className="h-1.5 rounded-full bg-primary transition-all"
               style={{ width: `${scorePercent}%` }}
             />
           </div>
@@ -304,14 +315,14 @@ function ThesisView({ thesis }: { thesis: StockThesis }) {
     <>
       <DialogHeader>
         <div className="flex items-center gap-3">
-          <DialogTitle className="text-lg">{thesis.ticker}</DialogTitle>
+          <DialogTitle className="font-mono text-lg">{thesis.ticker}</DialogTitle>
           {thesis.confidence && (
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CONFIDENCE_COLORS[thesis.confidence] ?? ""}`}>
+            <Badge variant={CONFIDENCE_VARIANTS[thesis.confidence] ?? "outline"}>
               {thesis.confidence.toUpperCase()} CONFIDENCE
-            </span>
+            </Badge>
           )}
         </div>
-        <p className="text-xs text-zinc-400">
+        <p className="font-mono text-xs text-muted-foreground">
           Generated {new Date(thesis.generated_at).toLocaleString()} · {thesis.model}
         </p>
       </DialogHeader>
@@ -331,8 +342,8 @@ function ThesisView({ thesis }: { thesis: StockThesis }) {
 function Section({ title, content }: { title: string; content: string }) {
   return (
     <div>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400 mb-1">{title}</h3>
-      <p className="text-sm text-zinc-700 leading-relaxed">{content}</p>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">{title}</h3>
+      <p className="text-sm leading-relaxed text-foreground">{content}</p>
     </div>
   );
 }

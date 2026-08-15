@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import type { badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,9 +10,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ErrorAlert } from "@/components/error-alert";
 import { api } from "@/lib/api";
 import { TradingViewWidget } from "@/components/tradingview-widget";
 import type { ManualExecutionOutcome, OrderPreview } from "@/types";
+import type { VariantProps } from "class-variance-authority";
+
+type BadgeVariant = VariantProps<typeof badgeVariants>["variant"];
 
 interface CreateForm {
   ticker: string;
@@ -34,19 +40,19 @@ const EMPTY_FORM: CreateForm = {
   execution_mode: "paper",
 };
 
-const RISK_BADGE: Record<string, string> = {
-  approved: "bg-green-100 text-green-800",
-  warning: "bg-yellow-100 text-yellow-800",
-  blocked: "bg-red-100 text-red-700",
+const RISK_VARIANTS: Record<string, BadgeVariant> = {
+  approved: "success",
+  warning: "warning",
+  blocked: "destructive",
 };
 
-const STATUS_BADGE: Record<string, string> = {
-  pending: "bg-blue-100 text-blue-800",
-  blocked: "bg-red-100 text-red-700",
-  approved: "bg-green-100 text-green-800",
-  rejected: "bg-zinc-100 text-zinc-600",
-  expired: "bg-zinc-100 text-zinc-600",
-  manual_recorded: "bg-zinc-100 text-zinc-600",
+const STATUS_VARIANTS: Record<string, BadgeVariant> = {
+  pending: "secondary",
+  blocked: "destructive",
+  approved: "success",
+  rejected: "outline",
+  expired: "outline",
+  manual_recorded: "outline",
 };
 
 const OUTCOMES: { value: ManualExecutionOutcome; label: string }[] = [
@@ -200,9 +206,9 @@ export default function OrdersPage() {
       </div>
 
       {previews.length === 0 ? (
-        <p className="text-sm text-zinc-400">No pending order previews.</p>
+        <p className="text-sm text-muted-foreground">No pending order previews.</p>
       ) : (
-        <div className="rounded-md border border-zinc-200 bg-white divide-y divide-zinc-100">
+        <div className="rounded-md border border-border bg-card divide-y divide-border">
           {previews.map((p) => (
             <div key={p.id}>
               <OrderRow
@@ -225,22 +231,22 @@ export default function OrdersPage() {
       )}
 
       <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-zinc-700">Awaiting Manual Confirmation</h2>
+        <h2 className="text-sm font-semibold text-muted-foreground">Awaiting Manual Confirmation</h2>
         {awaiting.length === 0 ? (
-          <p className="text-sm text-zinc-400">No previews awaiting manual execution confirmation.</p>
+          <p className="text-sm text-muted-foreground">No previews awaiting manual execution confirmation.</p>
         ) : (
-          <div className="rounded-md border border-zinc-200 bg-white divide-y divide-zinc-100">
+          <div className="rounded-md border border-border bg-card divide-y divide-border">
             {awaiting.map((p) => (
               <div key={p.id}>
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
                   <div className="flex items-center gap-2 min-w-[140px]">
-                    <span className="font-semibold text-sm">{p.ticker}</span>
-                    <span className="text-xs text-zinc-500">{p.action}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[p.status] ?? ""}`}>
+                    <span className="font-mono font-semibold text-sm">{p.ticker}</span>
+                    <span className="text-xs text-muted-foreground">{p.action}</span>
+                    <Badge variant={STATUS_VARIANTS[p.status] ?? "outline"}>
                       {p.status}
-                    </span>
+                    </Badge>
                   </div>
-                  <div className="flex gap-4 text-xs text-zinc-500 flex-1">
+                  <div className="flex gap-4 text-xs text-muted-foreground flex-1 font-mono">
                     <span>{p.shares} sh</span>
                     <span>{p.order_type} @ ${p.limit_price.toFixed(2)}</span>
                     <span>{p.time_in_force}</span>
@@ -313,7 +319,7 @@ export default function OrdersPage() {
                 <option value="manual_tradingview">Manual via TradingView</option>
               </select>
             </Field>
-            {createError && <p className="text-xs text-red-600">{createError}</p>}
+            {createError && <ErrorAlert message={createError} />}
             <div className="flex gap-2 pt-1">
               <Button className="flex-1" disabled={!form.ticker || !form.reason || submitting} onClick={submitCreate}>
                 {submitting ? "Submitting…" : "Create Preview"}
@@ -331,12 +337,12 @@ export default function OrdersPage() {
           </DialogHeader>
           {tvPreview && (
             <div className="space-y-3 mt-2">
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-muted-foreground">
                 TradingView doesn&apos;t support pre-filling order details from third-party apps.
                 A chart for {tvPreview.ticker} opened in a new tab — copy the details below and
                 enter them manually into the order ticket.
               </p>
-              <pre className="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs whitespace-pre-wrap">
+              <pre className="rounded-md border border-border bg-muted/50 px-3 py-2 text-xs font-mono whitespace-pre-wrap">
                 {orderDetailText(tvPreview)}
               </pre>
               <Button size="sm" variant="outline" onClick={copyOrderDetail}>
@@ -384,7 +390,7 @@ export default function OrdersPage() {
                 <textarea rows={2} className={inputCls} value={outcomeForm.notes}
                   onChange={(e) => setOutcomeForm((f) => f && ({ ...f, notes: e.target.value }))} />
               </Field>
-              {outcomeError && <p className="text-xs text-red-600">{outcomeError}</p>}
+              {outcomeError && <ErrorAlert message={outcomeError} />}
               <div className="flex gap-2 pt-1">
                 <Button className="flex-1" disabled={outcomeSubmitting} onClick={submitOutcome}>
                   {outcomeSubmitting ? "Submitting…" : "Record Outcome"}
@@ -399,12 +405,12 @@ export default function OrdersPage() {
   );
 }
 
-const inputCls = "w-full rounded-md border border-zinc-200 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400";
+const inputCls = "w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
 
 function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
   return (
     <div className="space-y-1">
-      <label className="text-xs font-medium text-zinc-500">{label}{required && " *"}</label>
+      <label className="text-xs font-medium text-muted-foreground">{label}{required && " *"}</label>
       {children}
     </div>
   );
@@ -430,21 +436,21 @@ function OrderRow({
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
       <div className="flex items-center gap-2 min-w-[140px]">
-        <span className="font-semibold text-sm">{p.ticker}</span>
-        <span className="text-xs text-zinc-500">{p.action}</span>
-        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${RISK_BADGE[p.risk_status] ?? ""}`}>
+        <span className="font-mono font-semibold text-sm">{p.ticker}</span>
+        <span className={`text-xs font-mono ${p.action === "BUY" ? "text-emerald-400" : "text-rose-400"}`}>{p.action}</span>
+        <Badge variant={RISK_VARIANTS[p.risk_status] ?? "outline"}>
           {p.risk_status}
-        </span>
-        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[p.status] ?? ""}`}>
+        </Badge>
+        <Badge variant={STATUS_VARIANTS[p.status] ?? "outline"}>
           {p.status}
-        </span>
+        </Badge>
       </div>
 
-      <div className="flex gap-4 text-xs text-zinc-500 flex-1">
+      <div className="flex gap-4 text-xs text-muted-foreground flex-1 font-mono">
         <span>{p.shares} sh</span>
         <span>{p.order_type} @ ${p.limit_price.toFixed(2)}</span>
         <span>{p.time_in_force}</span>
-        <span className="text-zinc-400">{p.execution_mode === "manual_tradingview" ? "manual · TradingView" : "paper"}</span>
+        <span className="text-muted-foreground/70">{p.execution_mode === "manual_tradingview" ? "manual · TradingView" : "paper"}</span>
       </div>
 
       <div className="flex gap-2 ml-auto">
