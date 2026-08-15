@@ -4,7 +4,6 @@ import logging
 import time
 from datetime import date, datetime
 
-import anthropic
 from pydantic import BaseModel, ValidationError
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
@@ -29,7 +28,7 @@ class ThesisResponse(BaseModel):
 
 
 class ThesisParseError(Exception):
-    """Claude's response could not be parsed/validated as a thesis, even after a retry."""
+    """The LLM's response could not be parsed/validated as a thesis, even after a retry."""
 
     def __init__(self, message: str, raw_text: str) -> None:
         super().__init__(message)
@@ -102,7 +101,7 @@ def _build_user_prompt(ticker: str, scan: ScanResult | None, news_text: str = ""
 class ThesisAgent:
     def __init__(self, db: Session) -> None:
         self.db = db
-        self._client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+        self._client = OpenAI(api_key=settings.openai_api_key)
 
     def generate(self, ticker: str, scan_result_id: int | None = None, force_refresh: bool = False) -> StockThesis:
         scan = self._load_scan(scan_result_id, ticker)
@@ -135,14 +134,14 @@ class ThesisAgent:
             ticker=ticker,
             input_hash=ihash,
             input_json=input_json,
-            model=settings.claude_model,
+            model=settings.openai_model,
         )
         self.db.add(run)
         self.db.flush()
 
         t0 = time.monotonic()
         try:
-            thesis = self._call_claude(run, ticker, scan, articles, user_prompt, ihash, computed_news_score)
+            thesis = self._call_llm(run, ticker, scan, articles, user_prompt, ihash, computed_news_score)
         except Exception as exc:
             run.error = str(exc)
             self.db.commit()
@@ -185,25 +184,28 @@ class ThesisAgent:
     def _request_thesis(
         self, run: AgentRun, user_prompt: str, retry_note: str | None = None
     ) -> tuple[str, ThesisResponse | None, str | None]:
-        """One call to Claude. Returns (raw_text, parsed-and-validated-or-None, error-or-None)."""
+        """One call to the LLM. Returns (raw_text, parsed-and-validated-or-None, error-or-None)."""
         prompt = user_prompt if not retry_note else f"{user_prompt}\n\n{retry_note}"
-        response = self._client.messages.create(
-            model=settings.claude_model,
+        response = self._client.chat.completions.create(
+            model=settings.openai_model,
             max_tokens=1024,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
         )
-        run.prompt_tokens = (run.prompt_tokens or 0) + response.usage.input_tokens
-        run.completion_tokens = (run.completion_tokens or 0) + response.usage.output_tokens
+        run.prompt_tokens = (run.prompt_tokens or 0) + response.usage.prompt_tokens
+        run.completion_tokens = (run.completion_tokens or 0) + response.usage.completion_tokens
 
-        raw_text = response.content[0].text
+        raw_text = response.choices[0].message.content
         try:
             parsed = ThesisResponse.model_validate(json.loads(raw_text))
         except (json.JSONDecodeError, ValidationError) as exc:
             return raw_text, None, str(exc)
         return raw_text, parsed, None
 
-    def _call_claude(
+    def _call_llm(
         self,
         run: AgentRun,
         ticker: str,
@@ -216,7 +218,9 @@ class ThesisAgent:
         raw_text, parsed, error = self._request_thesis(run, user_prompt)
         attempts = [raw_text]
         if parsed is None:
-            logger.warning("Thesis response for %s failed validation, retrying once: %s", ticker, error)
+            logger.warning(
+                "Thesis response for %s failed validation, retrying once: %s", ticker, error
+            )
             raw_text, parsed, error = self._request_thesis(
                 run,
                 user_prompt,
@@ -227,12 +231,12 @@ class ThesisAgent:
 
         if parsed is None:
             run.output_json = {"raw_attempts": attempts}
-            raise ThesisParseError(f"Claude response invalid after retry: {error}", raw_text)
+            raise ThesisParseError(f"LLM response invalid after retry: {error}", raw_text)
 
         thesis = StockThesis(
             ticker=ticker,
             scan_result_id=scan.id if scan else None,
-            model=settings.claude_model,
+            model=settings.openai_model,
             why_interesting=parsed.why_interesting,
             risk_factors=parsed.risk_factors,
             sector_context=parsed.sector_context,

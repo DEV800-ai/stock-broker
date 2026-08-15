@@ -8,7 +8,7 @@ AI-powered stock scanning and research assistant. Phase 1+2 only: scanner + watc
 
 - **Backend:** Python 3.11 + FastAPI + SQLAlchemy + Alembic + PostgreSQL (apps/api/)
 - **Frontend:** Next.js 15 + TypeScript + Tailwind + shadcn/ui (apps/web/)
-- **AI:** Anthropic Claude (claude-sonnet-4-6), provider abstracted in apps/api/src/broker/ai/provider.py
+- **AI:** OpenAI (gpt-4o), integration in apps/api/src/broker/ai/thesis_agent.py
 - **Broker data:** IBKR Client Portal Web API (requires Gateway running locally)
 
 ## Running locally

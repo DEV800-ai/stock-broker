@@ -7,7 +7,7 @@ export interface HealthStatus {
   status: string;
   db: boolean;
   ibkr_gateway: boolean;
-  claude: boolean;
+  ai: boolean;
 }
 
 export interface UniverseStats {

@@ -47,11 +47,11 @@ The dashboard (`/dashboard`) gives a system health snapshot:
 |---|---|
 | **DB** | PostgreSQL connection is healthy |
 | **IBKR Gateway** | Client Portal Gateway is reachable (optional) |
-| **Claude** | Anthropic API key is configured |
+| **OpenAI** | OpenAI API key is configured |
 | **Universe** | Total tickers loaded, how many have price bar history |
 | **Recent scan runs** | Status, start time, tickers scanned/flagged |
 
-If **Claude** shows as unavailable, check that `ANTHROPIC_API_KEY` is set in `apps/api/.env`.
+If **OpenAI** shows as unavailable, check that `OPENAI_API_KEY` is set in `apps/api/.env`.
 
 ---
 

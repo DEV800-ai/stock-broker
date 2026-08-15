@@ -1,6 +1,6 @@
 # Stock Broker
 
-AI-powered stock scanning and research assistant. Scans a universe of stocks daily, scores them on momentum/volume/relative-strength signals, and generates Claude-powered research theses — with paper trading and human-approved live trading planned for later phases.
+AI-powered stock scanning and research assistant. Scans a universe of stocks daily, scores them on momentum/volume/relative-strength signals, and generates OpenAI-powered research theses — with paper trading and human-approved live trading planned for later phases.
 
 > **Phase status:** Phase 1 (scanner + watchlist) and Phase 2 (AI thesis) are complete. Phase 3 (paper trading) is scaffolded. No live trading is active.
 
@@ -22,7 +22,7 @@ Market data (yfinance / IBKR)
         ↓
    Watchlist               — ranked list of flagged tickers
         ↓
-   AI Thesis Agent         — Claude generates research thesis per ticker
+   AI Thesis Agent         — OpenAI generates research thesis per ticker
    + Finnhub News          — recent headlines fed into the prompt
         ↓
    Paper Trading           — simulated trades, pending human approval
@@ -38,7 +38,7 @@ Market data (yfinance / IBKR)
 |---|---|
 | API | Python 3.11 · FastAPI · SQLAlchemy · Alembic |
 | Database | PostgreSQL 16 |
-| AI | Anthropic Claude (`claude-sonnet-4-6`) |
+| AI | OpenAI (`gpt-4o`) |
 | Market data | yfinance (prototype) · IBKR Client Portal API |
 | News | Finnhub company news API |
 | Frontend | Next.js 15 · TypeScript · Tailwind · shadcn/ui |
@@ -49,7 +49,7 @@ Market data (yfinance / IBKR)
 apps/
   api/          FastAPI backend
     src/broker/
-      ai/           ThesisAgent (Claude)
+      ai/           ThesisAgent (OpenAI)
       data/         yfinance, IBKR, Finnhub fetchers
       models/       SQLAlchemy ORM models
       ranking/      Signal scoring engine
@@ -66,7 +66,7 @@ apps/
 - Python 3.11+
 - Node.js 18+
 - PostgreSQL 16 (or podman/docker)
-- Anthropic API key
+- OpenAI API key
 - Finnhub API key (free tier works)
 
 ### 2. Start Postgres
@@ -85,7 +85,7 @@ podman run -d --name signalalpha-pg \
 cd apps/api
 cp ../../.env.example .env
 # Fill in:
-#   ANTHROPIC_API_KEY=sk-ant-...
+#   OPENAI_API_KEY=sk-...
 #   FINNHUB_API_KEY=...
 #   DATABASE_URL=postgresql://postgres:password@localhost:5432/signalalpha
 ```
@@ -123,7 +123,7 @@ npm run dev
 
 - No live trading code until Phase 4
 - No buy/sell recommendations in any API response — the thesis describes, never directs
-- Every Claude API call is logged to `agent_runs` table
+- Every OpenAI API call is logged to `agent_runs` table
 - Thesis is cached by SHA-256 hash of ticker + date + signals; never regenerated for the same input
 - Thesis only generated for tickers with `composite_score > 0.50` (configurable)
 

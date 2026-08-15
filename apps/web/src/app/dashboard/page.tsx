@@ -55,7 +55,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatusTile label="Database" ok={health?.db} />
         <StatusTile label="IBKR Gateway" ok={health?.ibkr_gateway} />
-        <StatusTile label="Claude AI" ok={health?.claude} />
+        <StatusTile label="OpenAI" ok={health?.ai} />
         <StatTile label="Universe" value={universe ? `${universe.active} tickers · ${universe.tickers_with_bars} with bars` : "—"} />
       </div>
 
