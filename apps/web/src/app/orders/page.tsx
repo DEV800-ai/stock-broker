@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
+import { TradingViewWidget } from "@/components/tradingview-widget";
 import type { OrderPreview } from "@/types";
 
 interface CreateForm {
@@ -64,6 +65,7 @@ export default function OrdersPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [tvPreview, setTvPreview] = useState<OrderPreview | null>(null);
   const [copied, setCopied] = useState(false);
+  const [chartId, setChartId] = useState<number | null>(null);
 
   function load() {
     api.orderQueue().then(setPreviews).catch(console.error);
@@ -136,14 +138,22 @@ export default function OrdersPage() {
       ) : (
         <div className="rounded-md border border-zinc-200 bg-white divide-y divide-zinc-100">
           {previews.map((p) => (
-            <OrderRow
-              key={p.id}
-              preview={p}
-              busy={busy === p.id}
-              onApprove={() => approve(p.id)}
-              onReject={() => reject(p.id)}
-              onOpenTradingView={() => openTradingView(p)}
-            />
+            <div key={p.id}>
+              <OrderRow
+                preview={p}
+                busy={busy === p.id}
+                chartOpen={chartId === p.id}
+                onApprove={() => approve(p.id)}
+                onReject={() => reject(p.id)}
+                onOpenTradingView={() => openTradingView(p)}
+                onToggleChart={() => setChartId((cur) => (cur === p.id ? null : p.id))}
+              />
+              {chartId === p.id && (
+                <div className="px-4 pb-4">
+                  <TradingViewWidget symbol={p.ticker} height={320} />
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -247,15 +257,19 @@ function Field({ label, children, required }: { label: string; children: React.R
 function OrderRow({
   preview: p,
   busy,
+  chartOpen,
   onApprove,
   onReject,
   onOpenTradingView,
+  onToggleChart,
 }: {
   preview: OrderPreview;
   busy: boolean;
+  chartOpen: boolean;
   onApprove: () => void;
   onReject: () => void;
   onOpenTradingView: () => void;
+  onToggleChart: () => void;
 }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
@@ -278,6 +292,7 @@ function OrderRow({
       </div>
 
       <div className="flex gap-2 ml-auto">
+        <Button size="sm" variant="outline" onClick={onToggleChart}>{chartOpen ? "Hide Chart" : "Chart"}</Button>
         {p.execution_mode === "manual_tradingview" && (
           <Button size="sm" variant="outline" onClick={onOpenTradingView}>Open in TradingView</Button>
         )}
