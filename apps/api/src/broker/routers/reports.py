@@ -10,6 +10,16 @@ from broker.reports.paper_trading_health import build_paper_trading_health_repor
 router = APIRouter()
 
 
+class SourceBreakdownOut(BaseModel):
+    trade_count: int
+    trade_status_counts: dict[str, int]
+    closed_trade_count: int
+    win_count: int
+    win_rate: float | None
+    avg_pnl_pct: float | None
+    outcome_counts: dict[str, int]
+
+
 class PaperTradingHealthOut(BaseModel):
     since: datetime | None
     generated_at: datetime
@@ -21,6 +31,8 @@ class PaperTradingHealthOut(BaseModel):
     trade_count: int
     trade_status_counts: dict[str, int]
     fill_status_counts: dict[str, int]
+    trade_source_counts: dict[str, int]
+    by_source: dict[str, SourceBreakdownOut]
     closed_trade_count: int
     win_count: int
     win_rate: float | None
@@ -31,4 +43,5 @@ class PaperTradingHealthOut(BaseModel):
 @router.get("/reports/paper-trading-health", response_model=PaperTradingHealthOut)
 def paper_trading_health(since: date | None = None, db: Session = Depends(get_db)) -> PaperTradingHealthOut:
     report = build_paper_trading_health_report(db, since=since)
-    return PaperTradingHealthOut(**report.__dict__)
+    data = {**report.__dict__, "by_source": {k: v.__dict__ for k, v in report.by_source.items()}}
+    return PaperTradingHealthOut(**data)

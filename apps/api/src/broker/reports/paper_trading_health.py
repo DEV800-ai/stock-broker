@@ -20,6 +20,21 @@ from broker.models.risk import RiskEvaluationRecord
 
 
 @dataclass
+class SourceBreakdown:
+    """Same trade-level stats as PaperTradingHealthReport, scoped to one PaperTrade.source."""
+
+    trade_count: int = 0
+    trade_status_counts: dict[str, int] = field(default_factory=dict)
+    closed_trade_count: int = 0
+    win_count: int = 0
+    win_rate: float | None = None
+    avg_pnl_pct: float | None = None
+    # executed|executed_with_changes|rejected|watch_only|paper_tracked|cancelled.
+    # Only populated for source="manual_tradingview".
+    outcome_counts: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass
 class PaperTradingHealthReport:
     since: datetime | None
     generated_at: datetime
@@ -34,6 +49,8 @@ class PaperTradingHealthReport:
     trade_count: int = 0
     trade_status_counts: dict[str, int] = field(default_factory=dict)
     fill_status_counts: dict[str, int] = field(default_factory=dict)
+    trade_source_counts: dict[str, int] = field(default_factory=dict)
+    by_source: dict[str, SourceBreakdown] = field(default_factory=dict)
 
     closed_trade_count: int = 0
     win_count: int = 0
@@ -73,12 +90,16 @@ def build_paper_trading_health_report(db: Session, since: date | None = None) ->
 
     trade_status_counts: dict[str, int] = {}
     fill_status_counts: dict[str, int] = {}
+    trade_source_counts: dict[str, int] = {}
+    trades_by_source: dict[str, list[PaperTrade]] = {}
     closed = []
     slippage_pcts: list[float] = []
     for t in trades:
         trade_status_counts[t.status] = trade_status_counts.get(t.status, 0) + 1
         if t.fill_status:
             fill_status_counts[t.fill_status] = fill_status_counts.get(t.fill_status, 0) + 1
+        trade_source_counts[t.source] = trade_source_counts.get(t.source, 0) + 1
+        trades_by_source.setdefault(t.source, []).append(t)
         if t.status == "closed":
             closed.append(t)
         if t.entry_price is not None and t.theoretical_entry_price:
@@ -88,6 +109,32 @@ def build_paper_trading_health_report(db: Session, since: date | None = None) ->
     win_rate = (win_count / len(closed)) if closed else None
     avg_pnl_pct = (sum(t.pnl_pct for t in closed if t.pnl_pct is not None) / len(closed)) if closed else None
     avg_slippage = (sum(slippage_pcts) / len(slippage_pcts)) if slippage_pcts else None
+
+    by_source: dict[str, SourceBreakdown] = {}
+    for source, source_trades in trades_by_source.items():
+        source_status_counts: dict[str, int] = {}
+        source_outcome_counts: dict[str, int] = {}
+        source_closed = []
+        for t in source_trades:
+            source_status_counts[t.status] = source_status_counts.get(t.status, 0) + 1
+            if t.outcome:
+                source_outcome_counts[t.outcome] = source_outcome_counts.get(t.outcome, 0) + 1
+            if t.status == "closed":
+                source_closed.append(t)
+        source_win_count = sum(1 for t in source_closed if (t.pnl or 0) > 0)
+        by_source[source] = SourceBreakdown(
+            trade_count=len(source_trades),
+            trade_status_counts=source_status_counts,
+            closed_trade_count=len(source_closed),
+            win_count=source_win_count,
+            win_rate=(source_win_count / len(source_closed)) if source_closed else None,
+            avg_pnl_pct=(
+                sum(t.pnl_pct for t in source_closed if t.pnl_pct is not None) / len(source_closed)
+                if source_closed
+                else None
+            ),
+            outcome_counts=source_outcome_counts,
+        )
 
     earliest_candidates = [x.created_at for x in (*previews, *trades) if x.created_at]
     earliest_activity = min(earliest_candidates) if earliest_candidates else None
@@ -106,6 +153,8 @@ def build_paper_trading_health_report(db: Session, since: date | None = None) ->
         trade_count=len(trades),
         trade_status_counts=trade_status_counts,
         fill_status_counts=fill_status_counts,
+        trade_source_counts=trade_source_counts,
+        by_source=by_source,
         closed_trade_count=len(closed),
         win_count=win_count,
         win_rate=win_rate,
