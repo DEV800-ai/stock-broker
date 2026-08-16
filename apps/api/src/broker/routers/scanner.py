@@ -1,10 +1,11 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
+from broker.config import settings
 from broker.db import get_db
 from broker.models.scan import ScanResult, ScanRun
 from broker.models.watchlist import WatchlistEntry
@@ -67,6 +68,17 @@ def delete_scan_run(run_id: int, db: Session = Depends(get_db)) -> None:
         raise HTTPException(status_code=404, detail="Scan run not found")
     if run.status == "complete":
         raise HTTPException(status_code=400, detail="Cannot delete a completed scan run")
+    if run.status == "running":
+        stale_after = timedelta(minutes=settings.scan_stale_after_minutes)
+        if datetime.utcnow() - run.started_at < stale_after:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Scan run is still active (running < {settings.scan_stale_after_minutes}m); "
+                    "deleting it now would crash the in-progress scan. Wait for it to finish or "
+                    "become stale before clearing."
+                ),
+            )
 
     result_ids = list(db.scalars(select(ScanResult.id).where(ScanResult.run_id == run_id)))
     if result_ids:

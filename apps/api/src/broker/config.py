@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     scanner_min_score: float = 0.30
     thesis_min_score: float = 0.50
     scanner_universe_size: int = 500
+    # A scan can legitimately run 60-90+ min for the full universe. Only let
+    # delete_scan_run clear a still-"running" run once it's been running
+    # longer than this — otherwise it races the background scan task and
+    # crashes it with ObjectDeletedError mid-scan.
+    scan_stale_after_minutes: int = 120
 
     paper_account_equity: float = 100_000.0
     risk_cooldown_days: int = 14

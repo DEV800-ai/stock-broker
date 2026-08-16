@@ -4,6 +4,7 @@ from datetime import date, datetime
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import ObjectDeletedError, StaleDataError
 
 from broker.config import settings
 from broker.data.universe_seed import SECTOR_ETF_MAP, SEED_TICKERS
@@ -29,6 +30,11 @@ class ScanRunner:
         self.db.add(run)
         self.db.commit()
         self.db.refresh(run)
+        # Capture as a plain int now, while the row is known to exist. Any later
+        # *read* of an expired ORM attribute (e.g. run.id after an intervening
+        # commit) triggers a reload — if the row's been deleted meanwhile, that
+        # reload raises ObjectDeletedError. Using run_id sidesteps that entirely.
+        run_id = run.id
 
         try:
             self._seed_universe()
@@ -38,7 +44,7 @@ class ScanRunner:
             self._fetch_and_store_bars(tickers)
 
             sector_bars_cache = self._load_sector_bars()
-            results = self._score_all(tickers, sector_bars_cache, run.id)
+            results = self._score_all(tickers, sector_bars_cache, run_id)
 
             flagged = [r for r in results if r.composite_score is not None and r.composite_score >= settings.scanner_min_score]
             self._upsert_watchlist(flagged, today=date.today())
@@ -49,8 +55,23 @@ class ScanRunner:
             run.tickers_flagged = len(flagged)
             self.db.commit()
             logger.info("Scan complete: %d scanned, %d flagged", len(tickers), len(flagged))
+        except (ObjectDeletedError, StaleDataError):
+            # The scan_runs row was deleted out from under us mid-scan (e.g. an
+            # operator cleared a run they believed was stuck/orphaned). There's no
+            # row left to write a "failed" status to — just roll back and stop.
+            logger.warning("Scan run %s was deleted mid-scan; aborting cleanly", run_id)
+            self.db.rollback()
         except Exception as exc:
             logger.exception("Scan failed")
+            self.db.rollback()
+            try:
+                run = self.db.get(ScanRun, run_id)
+            except (ObjectDeletedError, StaleDataError):
+                run = None
+                self.db.rollback()
+            if run is None:
+                logger.warning("Scan run %s was deleted mid-scan; could not record failure", run_id)
+                return
             run.status = "failed"
             run.finished_at = datetime.utcnow()
             run.error_message = str(exc)
