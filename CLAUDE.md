@@ -33,7 +33,7 @@ PYTHONPATH=src .venv/bin/uvicorn broker.main:app --reload
 ### Frontend
 ```bash
 cd apps/web
-cp .env.local.example .env.local   # NEXT_PUBLIC_API_KEY must match the API's API_KEY
+cp .env.local.example .env.local   # server-only API_KEY must match the API's API_KEY — never NEXT_PUBLIC_*
 npm install
 npm run dev
 ```

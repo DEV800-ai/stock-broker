@@ -10,10 +10,15 @@ npm run dev
 # → http://localhost:3000
 ```
 
-Requires the API to be running at `http://localhost:8000`. Override with:
+Browser requests go through this app's own `/api/backend/*` proxy
+(`src/app/api/backend/[...path]/route.ts`), which forwards to the FastAPI backend and attaches
+`X-API-Key` server-side — the key is never sent to the browser. Configure the backend location
+and secret via server-only env vars (see `.env.local.example`):
 
 ```bash
-NEXT_PUBLIC_API_URL=http://your-api-host npm run dev
+cp .env.local.example .env.local
+# API_URL=http://localhost:8000
+# API_KEY=<must match the API's API_KEY>
 ```
 
 ## Pages
@@ -21,8 +26,8 @@ NEXT_PUBLIC_API_URL=http://your-api-host npm run dev
 | Route | Description |
 |---|---|
 | `/dashboard` | System health + recent scan runs |
-| `/scanner` | Trigger scans, view run history |
-| `/watchlist` | Ranked ticker cards, thesis generation |
+| `/ideas` | Top Ideas — scan, ranked results, TradingView chart, thesis, order preview |
+| `/orders` | Order preview queue, approval, manual TradingView execution |
 | `/paper-trades` | Paper trade management and approval |
 
 See the [User Guide](../../docs/USER_GUIDE.md) for a full walkthrough.

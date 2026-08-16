@@ -12,8 +12,11 @@ import type {
   WatchlistEntry,
 } from "@/types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY ?? "";
+// Requests go to this Next.js app's own /api/backend proxy (see
+// src/app/api/backend/[...path]/route.ts), never directly to the FastAPI backend. The proxy
+// attaches X-API-Key server-side, so the key never ships in browser JS — see that route's
+// comment for why. Do not reintroduce a NEXT_PUBLIC_API_KEY here.
+const API_BASE = "/api/backend";
 const ACTOR = process.env.NEXT_PUBLIC_ACTOR ?? "operator";
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -21,7 +24,6 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      "X-API-Key": API_KEY,
       "X-Actor": ACTOR,
       ...init?.headers,
     },
@@ -75,6 +77,9 @@ export const api = {
 
   latestScanResult: (ticker: string) =>
     apiFetch<ScanResult>(`/api/v1/scanner/results/${ticker}`),
+
+  tradingViewUrl: (ticker: string) =>
+    apiFetch<{ url: string }>(`/api/v1/scanner/results/${ticker}/tradingview`),
 
   paperTrades: () => apiFetch<PaperTrade[]>("/api/v1/paper-trades"),
 

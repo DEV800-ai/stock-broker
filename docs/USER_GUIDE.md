@@ -57,7 +57,7 @@ If **OpenAI** shows as unavailable, check that `OPENAI_API_KEY` is set in `apps/
 
 ## 3. Running a scan
 
-Go to **Scanner** (`/scanner`) and click **Run Scan**.
+Go to **Top Ideas** (`/ideas`) and click **Run Scan**.
 
 The scan runs in the background and typically takes 1–3 minutes for the default universe (500 tickers). It will:
 
@@ -74,9 +74,9 @@ The page refreshes the run list automatically. A completed run shows **tickers s
 
 ## 4. Reviewing the watchlist
 
-Go to **Watchlist** (`/watchlist`).
+Stay on **Top Ideas** (`/ideas`).
 
-Tickers are displayed as cards ranked by composite score. Use the filter buttons at the top to narrow by status:
+Tickers are displayed as cards ranked by composite score. Click a card to open its detail panel, where you can set its status:
 
 | Status | Meaning |
 |---|---|

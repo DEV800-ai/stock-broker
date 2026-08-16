@@ -7,8 +7,13 @@ from sqlalchemy.orm import Session
 
 from broker.db import get_db
 from broker.models.scan import ScanResult, ScanRun
+from broker.orders import service as orders_service
 
 router = APIRouter()
+
+
+class TradingViewLinkOut(BaseModel):
+    url: str
 
 
 class ScanRunOut(BaseModel):
@@ -85,6 +90,11 @@ def get_latest_scan_result(ticker: str, db: Session = Depends(get_db)) -> ScanRe
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"No scan result for {ticker}")
     return result
+
+
+@router.get("/scanner/results/{ticker}/tradingview", response_model=TradingViewLinkOut)
+def get_tradingview_link(ticker: str, db: Session = Depends(get_db)) -> dict:
+    return {"url": orders_service.tradingview_url(db, ticker.upper())}
 
 
 @router.post("/scanner/trigger", status_code=202)

@@ -7,10 +7,8 @@ import { cn } from "@/lib/utils";
 const LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/ideas", label: "Top Ideas" },
-  { href: "/watchlist", label: "Watchlist" },
-  { href: "/scanner", label: "Scanner" },
-  { href: "/paper-trades", label: "Paper Trades" },
-  { href: "/orders", label: "Order Previews" },
+  { href: "/orders", label: "Orders" },
+  { href: "/paper-trades", label: "Positions" },
 ];
 
 export function NavBar() {

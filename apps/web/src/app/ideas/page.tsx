@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import type { badgeVariants } from "@/components/ui/badge";
+import type { VariantProps } from "class-variance-authority";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -16,9 +18,16 @@ import { ThesisView } from "@/components/thesis-view";
 import { TradingViewWidget } from "@/components/tradingview-widget";
 import { api } from "@/lib/api";
 import { generateAndPollThesis } from "@/lib/thesis";
-import type { ScanResult, StockThesis } from "@/types";
+import type { ScanResult, StockThesis, WatchlistStatus } from "@/types";
 
 const TOP_N = 10;
+
+const STATUS_LABEL: Record<WatchlistStatus, string> = {
+  watch: "Watching",
+  research: "Researching",
+  paper: "Paper Trading",
+  avoid: "Avoided",
+};
 
 interface CreateForm {
   action: "BUY" | "SELL";
@@ -44,6 +53,7 @@ function emptyForm(scan: ScanResult): CreateForm {
 
 export default function IdeasPage() {
   const [results, setResults] = useState<ScanResult[]>([]);
+  const [statuses, setStatuses] = useState<Record<string, WatchlistStatus>>({});
   const [scanning, setScanning] = useState(false);
 
   const [active, setActive] = useState<ScanResult | null>(null);
@@ -51,6 +61,7 @@ export default function IdeasPage() {
   const [loadingThesis, setLoadingThesis] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [thesisError, setThesisError] = useState<string | null>(null);
+  const [statusSaving, setStatusSaving] = useState(false);
 
   const [form, setForm] = useState<CreateForm | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -59,9 +70,37 @@ export default function IdeasPage() {
 
   function loadTop() {
     api.scanResults({ limit: TOP_N }).then(setResults).catch(console.error);
+    api.watchlist({ limit: TOP_N })
+      .then((entries) => {
+        const map: Record<string, WatchlistStatus> = {};
+        for (const e of entries) map[e.ticker] = e.status;
+        setStatuses(map);
+      })
+      .catch(console.error);
   }
 
   useEffect(() => { loadTop(); }, []);
+
+  async function setStatus(ticker: string, status: WatchlistStatus) {
+    setStatusSaving(true);
+    try {
+      await api.updateWatchlistStatus(ticker, status);
+      setStatuses((s) => ({ ...s, [ticker]: status }));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setStatusSaving(false);
+    }
+  }
+
+  async function openInTradingView(ticker: string) {
+    try {
+      const { url } = await api.tradingViewUrl(ticker);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
   async function runScan() {
     setScanning(true);
@@ -162,7 +201,7 @@ export default function IdeasPage() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {results.map((r, i) => (
-            <IdeaCard key={r.id} rank={i + 1} scan={r} onClick={() => openDetail(r)} />
+            <IdeaCard key={r.id} rank={i + 1} scan={r} status={statuses[r.ticker]} onClick={() => openDetail(r)} />
           ))}
         </div>
       )}
@@ -172,10 +211,33 @@ export default function IdeasPage() {
           {active && (
             <div className="space-y-5">
               <DialogHeader>
-                <DialogTitle className="font-mono text-lg">{active.ticker}</DialogTitle>
+                <div className="flex items-center justify-between pr-6">
+                  <DialogTitle className="font-mono text-lg">{active.ticker}</DialogTitle>
+                  <Button size="sm" variant="outline" onClick={() => openInTradingView(active.ticker)}>
+                    Open in TradingView ↗
+                  </Button>
+                </div>
               </DialogHeader>
 
               <TradingViewWidget symbol={active.ticker} height={280} />
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-muted-foreground mr-1">Status:</span>
+                {(Object.keys(STATUS_LABEL) as WatchlistStatus[]).map((s) => (
+                  <button
+                    key={s}
+                    disabled={statusSaving}
+                    onClick={() => setStatus(active.ticker, s)}
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                      statuses[active.ticker] === s
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-muted/70"
+                    }`}
+                  >
+                    {STATUS_LABEL[s]}
+                  </button>
+                ))}
+              </div>
 
               <div>
                 <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Thesis</h2>
@@ -263,7 +325,26 @@ function Field({ label, children, required }: { label: string; children: React.R
   );
 }
 
-function IdeaCard({ rank, scan, onClick }: { rank: number; scan: ScanResult; onClick: () => void }) {
+type BadgeVariant = VariantProps<typeof badgeVariants>["variant"];
+
+const STATUS_BADGE: Record<WatchlistStatus, BadgeVariant> = {
+  watch: "outline",
+  research: "secondary",
+  paper: "success",
+  avoid: "destructive",
+};
+
+function IdeaCard({
+  rank,
+  scan,
+  status,
+  onClick,
+}: {
+  rank: number;
+  scan: ScanResult;
+  status?: WatchlistStatus;
+  onClick: () => void;
+}) {
   const scorePercent = Math.round((scan.composite_score ?? 0) * 100);
   const change = scan.pct_change_5d;
 
@@ -274,6 +355,11 @@ function IdeaCard({ rank, scan, onClick }: { rank: number; scan: ScanResult; onC
           <div className="flex items-center gap-2">
             <span className="font-mono text-xs text-muted-foreground">#{rank}</span>
             <span className="font-mono text-base font-semibold">{scan.ticker}</span>
+            {status && (
+              <Badge variant={STATUS_BADGE[status]} className="text-xs font-normal">
+                {STATUS_LABEL[status]}
+              </Badge>
+            )}
           </div>
           <span className="font-mono text-sm">{scan.price != null ? `$${scan.price.toFixed(2)}` : "—"}</span>
         </div>
