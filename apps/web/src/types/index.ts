@@ -13,6 +13,7 @@ export type ManualExecutionOutcome =
   | "watch_only"
   | "paper_tracked"
   | "cancelled";
+export type AutonomyMode = "research_only" | "paper_only" | "preview_required";
 
 export interface HealthStatus {
   status: string;
@@ -116,6 +117,16 @@ export interface ManualExecutionResult {
   status: OrderPreviewStatus;
   execution_mode: OrderExecutionMode;
   paper_trade_id: number | null;
+}
+
+export interface AgentControl {
+  scope: string;
+  autonomy_mode: AutonomyMode;
+  is_killed: boolean;
+  killed_reason: string | null;
+  killed_at: string | null;
+  updated_at: string;
+  updated_by: string | null;
 }
 
 export interface PaperTrade {

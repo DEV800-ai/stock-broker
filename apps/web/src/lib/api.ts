@@ -1,4 +1,6 @@
 import type {
+  AgentControl,
+  AutonomyMode,
   HealthStatus,
   ManualExecutionOutcome,
   ManualExecutionResult,
@@ -158,5 +160,22 @@ export const api = {
     apiFetch<ManualExecutionResult>(`/api/v1/manual-execution/${id}`, {
       method: "POST",
       body: JSON.stringify(body),
+    }),
+
+  agentControl: () => apiFetch<AgentControl>("/api/v1/agent-control"),
+
+  killAgent: (reason: string) =>
+    apiFetch<AgentControl>("/api/v1/agent-control/kill", {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    }),
+
+  unkillAgent: () =>
+    apiFetch<AgentControl>("/api/v1/agent-control/unkill", { method: "POST" }),
+
+  setAutonomyMode: (mode: AutonomyMode) =>
+    apiFetch<AgentControl>("/api/v1/agent-control/autonomy-mode", {
+      method: "POST",
+      body: JSON.stringify({ mode }),
     }),
 };

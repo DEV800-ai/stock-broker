@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
+import { formatUtc } from "@/lib/utils";
 import type { HealthStatus, ScanRun, UniverseStats } from "@/types";
 
 export default function DashboardPage() {
@@ -79,7 +80,7 @@ export default function DashboardPage() {
               <Badge variant={lastRun.status === "complete" ? "success" : lastRun.status === "running" ? "secondary" : "destructive"}>
                 {lastRun.status}
               </Badge>
-              <span className="font-mono text-muted-foreground">{new Date(lastRun.started_at).toLocaleString()}</span>
+              <span className="font-mono text-muted-foreground">{formatUtc(lastRun.started_at)}</span>
               {lastRun.tickers_scanned != null && (
                 <span className="font-mono">{lastRun.tickers_scanned} scanned · {lastRun.tickers_flagged} flagged</span>
               )}
@@ -108,7 +109,7 @@ export default function DashboardPage() {
                   <Badge variant={run.status === "complete" ? "outline" : "secondary"} className="text-xs">
                     {run.status}
                   </Badge>
-                  <span className="font-mono text-muted-foreground">{new Date(run.started_at).toLocaleString()}</span>
+                  <span className="font-mono text-muted-foreground">{formatUtc(run.started_at)}</span>
                   {run.tickers_flagged != null && (
                     <span className="font-mono text-muted-foreground">{run.tickers_flagged} flagged</span>
                   )}
