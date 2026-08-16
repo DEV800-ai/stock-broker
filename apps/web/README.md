@@ -29,5 +29,7 @@ cp .env.local.example .env.local
 | `/ideas` | Top Ideas — scan, ranked results, TradingView chart, thesis, order preview |
 | `/orders` | Order preview queue, approval, manual TradingView execution |
 | `/paper-trades` | Paper trade management and approval |
+| `/help` | In-app usage guide for end users who don't have repo access |
 
-See the [User Guide](../../docs/USER_GUIDE.md) for a full walkthrough.
+See the [User Guide](../../docs/USER_GUIDE.md) for a full walkthrough (repo-only; `/help` covers
+the same ground for users without GitHub access).
