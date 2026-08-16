@@ -1,12 +1,13 @@
 from datetime import date, datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from broker.db import get_db
 from broker.models.scan import ScanResult, ScanRun
+from broker.models.watchlist import WatchlistEntry
 from broker.orders import service as orders_service
 
 router = APIRouter()
@@ -55,9 +56,26 @@ def list_scan_runs(limit: int = 20, db: Session = Depends(get_db)) -> list[ScanR
 def get_scan_run(run_id: int, db: Session = Depends(get_db)) -> ScanRun:
     run = db.get(ScanRun, run_id)
     if not run:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Scan run not found")
     return run
+
+
+@router.delete("/scanner/runs/{run_id}", status_code=204)
+def delete_scan_run(run_id: int, db: Session = Depends(get_db)) -> None:
+    run = db.get(ScanRun, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Scan run not found")
+    if run.status == "complete":
+        raise HTTPException(status_code=400, detail="Cannot delete a completed scan run")
+
+    result_ids = list(db.scalars(select(ScanResult.id).where(ScanResult.run_id == run_id)))
+    if result_ids:
+        db.query(WatchlistEntry).filter(WatchlistEntry.scan_result_id.in_(result_ids)).update(
+            {"scan_result_id": None}, synchronize_session=False
+        )
+        db.query(ScanResult).filter(ScanResult.id.in_(result_ids)).delete(synchronize_session=False)
+    db.delete(run)
+    db.commit()
 
 
 @router.get("/scanner/results", response_model=list[ScanResultOut])
@@ -87,7 +105,6 @@ def get_latest_scan_result(ticker: str, db: Session = Depends(get_db)) -> ScanRe
         .order_by(desc(ScanResult.scan_date), desc(ScanResult.id))
     ).first()
     if not result:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail=f"No scan result for {ticker}")
     return result
 

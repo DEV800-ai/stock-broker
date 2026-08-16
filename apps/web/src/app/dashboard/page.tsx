@@ -40,6 +40,15 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleClearRun(runId: number) {
+    try {
+      await api.deleteScanRun(runId);
+      await load();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   const lastRun = runs[0];
 
   return (
@@ -74,6 +83,11 @@ export default function DashboardPage() {
               {lastRun.tickers_scanned != null && (
                 <span className="font-mono">{lastRun.tickers_scanned} scanned · {lastRun.tickers_flagged} flagged</span>
               )}
+              {lastRun.status !== "complete" && (
+                <Button variant="ghost" size="sm" className="ml-auto" onClick={() => handleClearRun(lastRun.id)}>
+                  Clear
+                </Button>
+              )}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">No scans yet. Trigger a scan to start.</p>
@@ -97,6 +111,11 @@ export default function DashboardPage() {
                   <span className="font-mono text-muted-foreground">{new Date(run.started_at).toLocaleString()}</span>
                   {run.tickers_flagged != null && (
                     <span className="font-mono text-muted-foreground">{run.tickers_flagged} flagged</span>
+                  )}
+                  {run.status !== "complete" && (
+                    <Button variant="ghost" size="sm" className="ml-auto h-6 px-2 text-xs" onClick={() => handleClearRun(run.id)}>
+                      Clear
+                    </Button>
                   )}
                 </div>
               ))}

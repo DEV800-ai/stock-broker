@@ -45,13 +45,17 @@ The dashboard (`/dashboard`) gives a system health snapshot:
 
 | Indicator | What it means |
 |---|---|
-| **DB** | PostgreSQL connection is healthy |
-| **IBKR Gateway** | Client Portal Gateway is reachable (optional) |
+| **Database** | PostgreSQL connection is healthy |
+| **Market Data** | A scan has completed successfully within the freshness window |
 | **OpenAI** | OpenAI API key is configured |
 | **Universe** | Total tickers loaded, how many have price bar history |
-| **Recent scan runs** | Status, start time, tickers scanned/flagged |
+| **Last Scan / Recent Runs** | Status, start time, tickers scanned/flagged for the most recent runs |
 
 If **OpenAI** shows as unavailable, check that `OPENAI_API_KEY` is set in `apps/api/.env`.
+
+If a scan run is stuck showing **running** and never completes (for example, the API restarted
+mid-scan), click **Clear** next to that run in the Last Scan card or Recent Runs list to remove
+it. Completed runs can't be cleared this way — only `running`/`failed` ones.
 
 ---
 

@@ -32,6 +32,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     const text = await res.text();
     throw new Error(`API ${res.status}: ${text}`);
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -44,6 +45,9 @@ export const api = {
 
   triggerScan: () =>
     apiFetch<{ message: string }>("/api/v1/scanner/trigger", { method: "POST" }),
+
+  deleteScanRun: (runId: number) =>
+    apiFetch<void>(`/api/v1/scanner/runs/${runId}`, { method: "DELETE" }),
 
   scanResults: (params?: { date?: string; min_score?: number; limit?: number }) => {
     const q = new URLSearchParams();
