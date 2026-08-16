@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -15,6 +17,13 @@ from broker.routers import (
     universe,
     watchlist,
 )
+
+# Root logger defaults to WARNING, which silently drops the scanner's own
+# progress/lifecycle logs (e.g. "Scanning N tickers", "Scan complete") —
+# raise just our own package's loggers so production log output stays useful
+# for diagnosing stuck/slow scans without adding noise from library internals.
+logging.basicConfig(level=logging.WARNING, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.getLogger("broker").setLevel(logging.INFO)
 
 app = FastAPI(title="Stock Broker API", version="0.1.0")
 
