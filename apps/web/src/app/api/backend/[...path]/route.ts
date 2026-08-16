@@ -10,6 +10,25 @@ const HUMAN_APPROVAL_KEY = process.env.HUMAN_APPROVAL_KEY ?? "";
 
 export const dynamic = "force-dynamic";
 
+// Mirrors the routes gated by require_human_actor in broker/auth.py (see broker/main.py's
+// router wiring). X-Human-Key must only reach these — attaching it to every proxied request
+// would silently collapse require_human_actor back to require_actor for anyone using the UI.
+const HUMAN_GATED_ROUTES: { method: string; pattern: RegExp }[] = [
+  { method: "POST", pattern: /^api\/v1\/manual-execution\/[^/]+$/ },
+  { method: "POST", pattern: /^api\/v1\/agent-control\/unkill$/ },
+  { method: "POST", pattern: /^api\/v1\/agent-control\/autonomy-mode$/ },
+  { method: "PUT", pattern: /^api\/v1\/paper-trades\/[^/]+\/approve$/ },
+  { method: "PUT", pattern: /^api\/v1\/paper-trades\/[^/]+\/reject$/ },
+  { method: "PUT", pattern: /^api\/v1\/paper-trades\/[^/]+\/close$/ },
+  { method: "POST", pattern: /^api\/v1\/orders\/[^/]+\/approve$/ },
+  { method: "POST", pattern: /^api\/v1\/orders\/[^/]+\/reject$/ },
+];
+
+function isHumanGated(method: string, path: string[]): boolean {
+  const joined = path.join("/");
+  return HUMAN_GATED_ROUTES.some((r) => r.method === method && r.pattern.test(joined));
+}
+
 async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
   const target = new URL(`/${path.join("/")}${req.nextUrl.search}`, API_URL);
 
@@ -18,7 +37,9 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
   headers.set("X-API-Key", API_KEY);
   const actor = req.headers.get("x-actor");
   if (actor) headers.set("X-Actor", actor);
-  if (HUMAN_APPROVAL_KEY) headers.set("X-Human-Key", HUMAN_APPROVAL_KEY);
+  if (HUMAN_APPROVAL_KEY && isHumanGated(req.method, path)) {
+    headers.set("X-Human-Key", HUMAN_APPROVAL_KEY);
+  }
 
   const init: RequestInit = { method: req.method, headers };
   if (req.method !== "GET" && req.method !== "HEAD") {
