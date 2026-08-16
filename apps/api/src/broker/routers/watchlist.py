@@ -2,7 +2,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from broker.db import get_db
@@ -41,7 +41,9 @@ def get_watchlist(
     limit: int = Query(default=50, le=200),
     db: Session = Depends(get_db),
 ) -> list[WatchlistEntry]:
-    effective_date = watchlist_date or date.today()
+    effective_date = watchlist_date
+    if effective_date is None:
+        effective_date = db.scalar(select(func.max(WatchlistEntry.watchlist_date))) or date.today()
     stmt = (
         select(WatchlistEntry)
         .where(WatchlistEntry.watchlist_date == effective_date)
