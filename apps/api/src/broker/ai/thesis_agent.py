@@ -10,6 +10,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from broker.config import settings
+from broker.data.edgar import fetch_recent_filings, format_filings_for_prompt, score_filings
 from broker.data.finnhub import fetch_company_news, format_news_for_prompt, score_news
 from broker.models.news import NewsItem
 from broker.models.scan import ScanResult
@@ -124,8 +125,14 @@ class ThesisAgent:
                 return cached
 
         articles = fetch_company_news(ticker)
-        news_text = format_news_for_prompt(articles)
-        computed_news_score = score_news(articles)
+        filings = fetch_recent_filings(ticker)
+        news_parts = [
+            p for p in (format_news_for_prompt(articles) if articles else "", format_filings_for_prompt(filings)) if p
+        ]
+        news_text = "\n".join(news_parts) if news_parts else "No recent news found."
+        computed_news_score = (
+            round((score_news(articles) + score_filings(filings)) / 2, 3) if (articles or filings) else 0.0
+        )
 
         user_prompt = _build_user_prompt(ticker, scan, news_text)
         input_json = {"ticker": ticker, "scan_result_id": scan_result_id, "prompt": user_prompt}
@@ -142,7 +149,7 @@ class ThesisAgent:
 
         t0 = time.monotonic()
         try:
-            thesis = self._call_llm(run, ticker, scan, articles, user_prompt, ihash, computed_news_score)
+            thesis = self._call_llm(run, ticker, scan, articles, filings, user_prompt, ihash, computed_news_score)
         except Exception as exc:
             run.error = str(exc)
             self.db.commit()
@@ -212,6 +219,7 @@ class ThesisAgent:
         ticker: str,
         scan: ScanResult | None,
         articles: list[dict],
+        filings: list[dict],
         user_prompt: str,
         ihash: str,
         news_score: float,
@@ -244,7 +252,7 @@ class ThesisAgent:
             news_summary=parsed.news_summary,
             catalysts=parsed.catalysts,
             confidence=parsed.confidence,
-            news_score=news_score if articles else None,
+            news_score=news_score if (articles or filings) else None,
             prompt_tokens=run.prompt_tokens,
             completion_tokens=run.completion_tokens,
             raw_response={"text": raw_text, "input_hash": ihash},
@@ -253,6 +261,7 @@ class ThesisAgent:
         self.db.flush()
 
         self._store_news_items(ticker, articles)
+        self._store_filing_items(ticker, filings)
         run.output_json = {"thesis_id": thesis.id}
         self._backfill_watchlist(ticker, thesis.id)
         return thesis
@@ -282,6 +291,32 @@ class ThesisAgent:
                 source=a.get("source"),
                 source_url=url,
                 published_at=published_at,
+                event_type=event_type,
+                event_weight=weight,
+            )
+            self.db.add(item)
+
+    def _store_filing_items(self, ticker: str, filings: list[dict]) -> None:
+        from broker.data.edgar import classify_filing
+
+        for f in filings:
+            url = f.get("url") or ""
+            if not url:
+                continue
+            exists = self.db.scalars(
+                select(NewsItem)
+                .where(NewsItem.ticker == ticker)
+                .where(NewsItem.source_url == url)
+            ).first()
+            if exists:
+                continue
+            event_type, weight = classify_filing(f)
+            item = NewsItem(
+                ticker=ticker,
+                headline=f"{ticker} filed {f['form']}",
+                source="SEC EDGAR",
+                source_url=url,
+                published_at=datetime.fromisoformat(f["filingDate"]),
                 event_type=event_type,
                 event_weight=weight,
             )

@@ -24,6 +24,12 @@ class Settings(BaseSettings):
 
     finnhub_api_key: str = ""
 
+    # SEC requires a descriptive User-Agent identifying the requester on all
+    # data.sec.gov / sec.gov calls, e.g. "SignalAlpha you@example.com". Unset
+    # skips EDGAR filing fetches (see data/edgar.py), same degrade-gracefully
+    # pattern as finnhub_api_key.
+    sec_edgar_user_agent: str = ""
+
     scanner_min_score: float = 0.30
     thesis_min_score: float = 0.50
     scanner_universe_size: int = 500
