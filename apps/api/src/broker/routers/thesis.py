@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from broker.db import get_db
 from broker.models.thesis import StockThesis
+from broker.models.thesis_check import ThesisCheck
 
 router = APIRouter()
 
@@ -33,6 +34,19 @@ class GenerateThesisRequest(BaseModel):
     ticker: str
     scan_result_id: int | None = None
     force_refresh: bool = False
+
+
+class ThesisCheckOut(BaseModel):
+    id: int
+    ticker: str
+    thesis_id: int
+    new_thesis_id: int | None
+    triggered_by: str
+    checked_at: datetime
+    changed: bool
+    notes: str | None
+
+    model_config = {"from_attributes": True}
 
 
 @router.get("/thesis/{ticker}", response_model=ThesisOut)
@@ -69,3 +83,22 @@ def generate_thesis(
     agent = ThesisAgent(db)
     background_tasks.add_task(agent.generate, body.ticker.upper(), body.scan_result_id, body.force_refresh)
     return {"message": f"Thesis generation queued for {body.ticker.upper()}"}
+
+
+@router.post("/thesis-checks/sweep", status_code=202)
+def trigger_thesis_sweep(background_tasks: BackgroundTasks, db: Session = Depends(get_db)) -> dict:
+    from broker.ai.thesis_check_service import sweep_stale_theses
+    background_tasks.add_task(sweep_stale_theses, db)
+    return {"message": "Thesis re-check sweep queued"}
+
+
+@router.get("/thesis-checks/{ticker}", response_model=list[ThesisCheckOut])
+def get_thesis_checks(ticker: str, db: Session = Depends(get_db)) -> list[ThesisCheck]:
+    return list(
+        db.scalars(
+            select(ThesisCheck)
+            .where(ThesisCheck.ticker == ticker.upper())
+            .order_by(desc(ThesisCheck.checked_at))
+            .limit(20)
+        )
+    )
