@@ -16,7 +16,6 @@ class StockUniverse(Base):
     industry: Mapped[str | None] = mapped_column(String(200))
     market_cap: Mapped[int | None] = mapped_column(BigInteger)
     exchange: Mapped[str | None] = mapped_column(String(20))
-    ibkr_conid: Mapped[int | None] = mapped_column(Integer)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     added_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     last_refreshed: Mapped[datetime | None] = mapped_column(DateTime)

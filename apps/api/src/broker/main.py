@@ -11,6 +11,7 @@ from broker.routers import (
     manual_execution,
     orders,
     paper_trades,
+    portfolio,
     reports,
     scanner,
     thesis,
@@ -44,6 +45,7 @@ app.include_router(scanner.router, prefix=PREFIX, tags=["scanner"], dependencies
 app.include_router(watchlist.router, prefix=PREFIX, tags=["watchlist"], dependencies=AUTH)
 app.include_router(thesis.router, prefix=PREFIX, tags=["thesis"], dependencies=AUTH)
 app.include_router(paper_trades.router, prefix=PREFIX, tags=["paper-trades"], dependencies=AUTH)
+app.include_router(portfolio.router, prefix=PREFIX, tags=["portfolio"], dependencies=AUTH)
 app.include_router(orders.router, prefix=PREFIX, tags=["orders"], dependencies=AUTH)
 app.include_router(manual_execution.router, prefix=PREFIX, tags=["manual-execution"], dependencies=AUTH)
 app.include_router(audit.router, prefix=PREFIX, tags=["audit"], dependencies=AUTH)

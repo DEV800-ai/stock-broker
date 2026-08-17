@@ -16,9 +16,6 @@ class Settings(BaseSettings):
     # also approve trades or touch the kill switch.
     human_approval_key: str = ""
 
-    ibkr_gateway_url: str = "https://localhost:5000"
-    ibkr_account_id: str = ""
-
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
 
@@ -49,14 +46,5 @@ class Settings(BaseSettings):
     paper_fill_partial_adv_pct: float = 0.10
     paper_fill_reject_adv_pct: float = 0.25
     paper_fill_min_partial_ratio: float = 0.3
-
-    # Phase 4 gate — see execution/ibkr_adapter.py. Inert today: no code path
-    # reads this to enable live execution yet.
-    enable_live_trading: bool = False
-
-    # portfolio/ibkr_provider.py::PortfolioSnapshot.is_stale() threshold. Inert
-    # today: nothing calls IBKRPortfolioProvider from a live request path yet.
-    ibkr_portfolio_max_staleness_seconds: int = 300
-
 
 settings = Settings()

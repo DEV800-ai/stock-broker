@@ -2,14 +2,14 @@
 
 ## Project
 
-AI-powered stock scanning and research assistant. Phase 1+2 only: scanner + watchlist + AI thesis. No live trading.
+AI-powered stock scanning and research assistant. Scanner + watchlist + AI thesis + paper trading + human-directed manual TradingView execution. No live/automated trading — never planned; see Phase roadmap below.
 
 ## Stack
 
 - **Backend:** Python 3.11 + FastAPI + SQLAlchemy + Alembic + PostgreSQL (apps/api/)
 - **Frontend:** Next.js 15 + TypeScript + Tailwind + shadcn/ui (apps/web/)
 - **AI:** OpenAI (gpt-4o), integration in apps/api/src/broker/ai/thesis_agent.py
-- **Broker data:** IBKR Client Portal Web API (requires Gateway running locally)
+- **Market data:** yfinance (`broker/data/yfinance_data.py`). No broker API integration — see "Execution model" below.
 
 ## Running locally
 
@@ -38,21 +38,21 @@ npm install
 npm run dev
 ```
 
-## IBKR Gateway (Phase 4 live-trading placeholder only — not required for scans/theses/orders)
+## Execution model — no live broker integration, ever
 
-Market data (scans, prices, order-preview `limit_price` lookups) runs entirely on yfinance (`broker/data/yfinance_data.py`) and does not touch IBKR. IBKR Gateway is only needed for the future Phase 4 live-trading path (`execution/ibkr_adapter.py`, currently a no-op placeholder) and for `portfolio/ibkr_provider.py` (also unwired today). You do not need it running to develop or run scans/watchlist/theses/order previews locally.
-
-If/when working on Phase 4 live trading:
-1. Download IBKR Client Portal Gateway from interactivebrokers.com
-2. Run: `java -jar clientportal.gw/root/run.sh`
-3. Log in at https://localhost:5000 (browser, requires 2FA)
-4. Keep the process running; the app calls /v1/api/tickle every 60s to maintain session
-
-**Important:** IBKR does not support fully automated OAuth. Manual 2FA login is always required on startup. Do not attempt to automate this step — flag it to the user.
+Signal Alpha never places, modifies, or cancels an order and never connects
+to a broker API. There is no IBKR (or other broker) integration in this
+codebase — it was removed after a deliberate pivot (see
+`docs/SIGNAL_ALPHA_DESIGN.md` §9). Non-paper trades go through **manual
+TradingView execution**: the human trades manually in TradingView (or
+wherever they choose), then self-reports the outcome via
+`POST /manual-execution/{id}` (`broker/manual_execution/service.py`).
+Portfolio context (`broker/portfolio/service.py`) is derived entirely from
+`PaperTrade` rows, not a live account connection.
 
 ## Key rules
 
-- **No live trading code until Phase 4.** paper_trades.status is gated — pending_approval → open only after human approval. Order execution goes through `BrokerAdapter` (`broker/execution/base.py`); `orders/service.py::get_broker_adapter()` always returns `PaperAdapter` today. `execution/ibkr_adapter.py::IBKRAdapter` exists as a structural placeholder only — its `submit_order` always raises, never call `IBKRClient.place_order` directly from anywhere in the approval path.
+- **No live/automated trading code, full stop.** paper_trades.status is gated — pending_approval → open only after human approval. Order execution goes through `BrokerAdapter` (`broker/execution/base.py`); `orders/service.py::get_broker_adapter()` always returns `PaperAdapter`, and that's the only adapter that will ever be wired there — non-paper trades never go through `BrokerAdapter` at all, they go through the manual-execution self-report flow above. Do not add a live broker adapter or call any broker's order-placement API from anywhere in this codebase.
 - **No buy/sell recommendations** in any API response. Thesis describes, never directs.
 - **Claude API calls are always logged** to agent_runs table. Never fire-and-forget.
 - **Thesis caching:** check agent_runs.input_hash (SHA256 of ticker+date+signals) before generating. Never regenerate the same thesis.
@@ -73,12 +73,11 @@ PYTHONPATH=src .venv/bin/alembic upgrade head
 
 - Requires persistent volume for PostgreSQL
 - Set all env vars from .env.example in Railway dashboard
-- IBKR Gateway cannot run on Railway — it must run on a machine with browser access for 2FA
 
 ## Phase roadmap
 
 1. Scanner + watchlist (current)
 2. AI thesis per ticker (current)
 3. Paper trading with human approval — includes both simulated `PaperAdapter` fills and manual TradingView execution (`execution_mode="manual_tradingview"`: human trades manually, self-reports the outcome via `/manual-execution/{id}`, see `docs/SIGNAL_ALPHA_DESIGN.md` §9)
-4. Human-approved live trading via IBKR
+4. ~~Human-approved live trading via IBKR~~ — dropped, superseded by manual TradingView execution (Phase 3)
 5. Limited automation with strict guardrails

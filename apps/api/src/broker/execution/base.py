@@ -1,10 +1,9 @@
 """Broker execution interface.
 
-orders/service.py talks to this interface, never to a concrete adapter or to
-IBKRClient directly. That indirection is the actual safety boundary described
-in SIGNAL_ALPHA_DESIGN.md §9/§16: a future developer adding live execution
-has to plug a new adapter into `get_broker_adapter()`, not sprinkle
-`IBKRClient.place_order()` calls through the order-approval code path.
+orders/service.py talks to this interface, never to a concrete adapter
+directly. `PaperAdapter` (execution/paper_adapter.py) is the only adapter in
+use — live execution is not planned; non-paper trades go through the manual
+TradingView self-report flow (manual_execution/service.py) instead.
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass

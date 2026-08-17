@@ -198,8 +198,6 @@ Status is updated manually from the watchlist. There is no automatic promotion b
 
 ## 10. Important limits
 
-- **No live trading is available in the current build.** Paper trades are simulated only.
+- **Signal Alpha never places orders.** Paper trades are simulated, and manual TradingView trades are self-reported by the human after the fact — there is no automated or live execution path.
 - The thesis is an analytical description, not financial advice. It will never say "buy" or "sell."
-- IBKR Gateway requires manual 2FA login on every startup — it cannot be automated.
 - Finnhub free tier is rate-limited. If news fetching is slow or empty, check your `FINNHUB_API_KEY`.
-- yfinance data is for research/prototype use only. For production accuracy, switch to IBKR market data.

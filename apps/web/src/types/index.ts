@@ -25,7 +25,6 @@ export interface HealthStatus {
 export interface UniverseStats {
   total: number;
   active: number;
-  with_conid: number;
   tickers_with_bars: number;
 }
 
@@ -127,6 +126,25 @@ export interface AgentControl {
   killed_at: string | null;
   updated_at: string;
   updated_by: string | null;
+}
+
+export interface Position {
+  ticker: string;
+  shares: number;
+  entry_price: number;
+  current_price: number;
+  unrealized_pnl: number;
+  unrealized_pnl_pct: number;
+  source: string;
+}
+
+export interface Portfolio {
+  net_liquidation: number;
+  cash: number;
+  sector_values: Record<string, number>;
+  realized_pnl_today: number;
+  realized_pnl_week: number;
+  positions: Position[];
 }
 
 export interface PaperTrade {

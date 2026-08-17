@@ -82,9 +82,9 @@ export default function HelpPage() {
         </CardHeader>
         <CardContent>
           <ul className="list-disc space-y-1 pl-4 text-sm text-muted-foreground">
-            <li>It does not place live trades. Trades are simulated (paper) only.</li>
+            <li>It does not place trades. Trades are either simulated (paper) or executed manually by you elsewhere (e.g. TradingView) and self-reported back.</li>
             <li>It does not tell you to buy or sell — theses describe conditions, not actions.</li>
-            <li>It does not log in to TradingView, IBKR, or any broker on your behalf.</li>
+            <li>It does not log in to TradingView or any broker on your behalf.</li>
             <li>It does not move a paper trade to open without a human clicking Approve.</li>
             <li>It does not file taxes or calculate tax liability.</li>
           </ul>

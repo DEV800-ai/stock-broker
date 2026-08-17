@@ -509,45 +509,53 @@ Important nuance: **"approved" by the risk engine ≠ order sent to broker.** In
 
 ---
 
-## 9. Broker Adapter Interface
+## 9. Execution Model — Manual TradingView, No Live Broker Integration
 
-```python
-# broker/base.py
+**Superseded from an earlier draft:** this section originally specified an
+IBKR `BrokerAdapter` interface (`get_positions`, `place_order`,
+`cancel_order`, etc.) with a Client Portal Gateway connection, intended to
+extend to live execution in a later phase. That plan is dropped. Signal
+Alpha never places, modifies, or cancels an order, and never connects to a
+broker API — all IBKR code (`data/ibkr.py`, `execution/ibkr_adapter.py`,
+`portfolio/ibkr_provider.py`) has been removed from the codebase. The
+reasoning: IBKR's OAuth Web API is not currently approved for retail/
+individual accounts (researched, not assumed), which would have forced the
+local Client Portal Gateway's manual-2FA-on-every-startup dependency to
+persist indefinitely — the single largest source of operational complexity
+on the original roadmap. Dropping it removes that dependency entirely and
+also simplifies the compliance posture (§12): Signal Alpha never holds a
+broker relationship or touches order placement.
 
-class BrokerAdapter(ABC):
-    @abstractmethod
-    def is_authenticated(self) -> bool: ...
-    @abstractmethod
-    def get_accounts(self) -> list[Account]: ...
-    @abstractmethod
-    def get_positions(self, account_id: str) -> list[Position]: ...
-    @abstractmethod
-    def get_cash(self, account_id: str) -> float: ...
-    @abstractmethod
-    def get_snapshot(self, conids: list[int]) -> list[Quote]: ...
-    @abstractmethod
-    def get_bars(self, conid: int, period: str, bar: str) -> pd.DataFrame: ...
-    @abstractmethod
-    def resolve_conid(self, ticker: str) -> int | None: ...
-    @abstractmethod
-    def place_order(self, account_id: str, order: OrderRequest) -> OrderResult: ...
-    @abstractmethod
-    def get_order_status(self, account_id: str, order_id: str) -> OrderStatus: ...
-    @abstractmethod
-    def cancel_order(self, account_id: str, order_id: str) -> bool: ...
-```
+**The actual model:** `execution/base.py::BrokerAdapter` (ABC,
+`submit_order(...)`) still exists but is effectively vestigial —
+`execution/paper_adapter.py::PaperAdapter` is its only implementation, used
+only for `execution_mode="paper"` simulated trades. Every other trade goes
+through **manual TradingView execution**: `OrderPreview.execution_mode =
+"manual_tradingview"`. Approving one of these previews (`POST
+/orders/{id}/approve`) does **not** call a `BrokerAdapter` — it just marks
+the preview `approved` and hands the human a chart deep-link
+(`GET/POST /orders/{id}/open-tradingview`) plus a copy-to-clipboard
+order-detail block (TradingView has no public URL-parameter mechanism to
+prefill its order ticket from a third-party site — confirmed by research,
+not a gap to build around). The human trades manually in TradingView (or
+elsewhere — TradingView is just the user's chosen venue, nothing about this
+design depends on it specifically), then self-reports what actually
+happened via `POST /manual-execution/{id}` (`broker/manual_execution/service.py`),
+which records the outcome (`executed` / `executed_with_changes` /
+`rejected` / `watch_only` / `paper_tracked` / `cancelled`) and, for the two
+"position" outcomes, creates a `PaperTrade` row with
+`source="manual_tradingview"` so it flows through the same approval/close
+lifecycle as simulated paper trades but stays reportable separately
+(`reports/paper_trading_health.py` breaks out win rate / pnl / status by
+`source`).
 
-`broker/ibkr_adapter.py` implements this on top of the existing `data/ibkr.py` `IBKRClient` (already handles self-signed TLS, retries, tickle). `broker/paper_adapter.py` implements the same interface with simulated fills against `scan_results`/live quotes — meaning the order-preview → risk-engine → approval-queue pipeline is *identical* for paper and live, which is exactly what makes paper trading a meaningful rehearsal of the live path rather than a separate toy system.
-
-Adding a second broker later (e.g. Alpaca) means writing one adapter class — nothing above the adapter layer should know it's talking to IBKR specifically.
-
-**IBKR connection model — decision:** MVP and single-operator use stay on the **Client Portal Gateway** (local Java process, manual 2FA login, already documented in `CLAUDE.md`) as the sole `IBKRLocalGatewayAdapter` implementation. This is deliberate, not a placeholder to "fix" later:
-- Persona "Dana" (§2.1) connects her own account — this is the model IBKR's retail/individual access is built for.
-- IBKR's **Web API with OAuth** is a real alternative that removes the local-gateway dependency, but it changes the product's compliance posture: connecting to *other users'* IBKR accounts makes Signal Alpha a third-party vendor in IBKR's terms, which historically requires separate IBKR compliance/onboarding approval and may implicate financial-authority registration questions. That's explicitly out of scope — Signal Alpha does not support multi-account/multi-user access in MVP (§2.1 tertiary persona, §14).
-- Because `BrokerAdapter` is already an interface (not concrete IBKR calls sprinkled through the codebase), swapping in an `IBKROAuthWebApiAdapter` later — if Signal Alpha ever becomes a multi-user product — is a new adapter class, not a rearchitecture. No code above the adapter layer should change.
-- Action item: none for MVP. Revisit only if/when multi-user access becomes a real product direction, and treat the IBKR third-party approval process as its own milestone with legal input, not an engineering task to route around.
-
-**Manual TradingView execution mode:** `OrderPreview.execution_mode` supports a second path alongside the paper/live `BrokerAdapter` flow: `manual_tradingview`. Approving one of these previews (`POST /orders/{id}/approve`) does **not** call a `BrokerAdapter` — it just marks the preview `approved` and hands the human a chart deep-link plus a copy-to-clipboard order-detail block (TradingView has no public URL-parameter mechanism to prefill its order ticket from a third-party site — confirmed by research, not a gap to build around). The human trades manually in TradingView, then self-reports what actually happened via `POST /manual-execution/{id}` (`broker/manual_execution/service.py`), which records the outcome (`executed` / `executed_with_changes` / `rejected` / `watch_only` / `paper_tracked` / `cancelled`) and, for the two "position" outcomes, creates a `PaperTrade` row with `source="manual_tradingview"` so it flows through the same approval/close lifecycle as simulated paper trades but stays reportable separately (`reports/paper_trading_health.py` breaks out win rate / pnl / status by `source`). This exists because MVP validation needs real market fills without waiting on IBKR live-execution approval (Milestone E) — it is not a `BrokerAdapter` implementation and shouldn't become one; it's a deliberately manual bridge, not a step toward automating TradingView.
+**Portfolio context is derived entirely from `PaperTrade` rows** (both
+`source="paper"` and `source="manual_tradingview"`), not from any live
+broker connection — see `orders/service.py::build_portfolio_state()` and
+`portfolio/service.py::get_portfolio_view()`. There is no
+`broker_accounts`/`portfolio_snapshots` table and none is planned; the
+`PaperTrade` table (with self-reported real fills for the manual-execution
+rows) is the single source of truth for "what's currently held."
 
 ---
 
@@ -560,11 +568,15 @@ Building on what already exists (scanner, thesis agent, paper trading loop, IBKR
 - Event-type + sentiment classifier (rule-based first pass + LLM fallback for ambiguous cases — don't call an LLM per headline at scan volume)
 - Wire into `thesis_agent.py` as additional context
 
-**Milestone B — Portfolio Context**
-- `broker_accounts`, `portfolio_snapshots` tables
-- `broker/ibkr_adapter.py` implementing read-only parts of `BrokerAdapter`
-- Portfolio sync worker
-- `ai/portfolio_agent.py` for digest generation
+**Milestone B — Portfolio Context** — DONE, derived from `PaperTrade`, not IBKR
+- No new tables — positions/exposure derived from existing `PaperTrade` rows
+  (`orders/service.py::build_portfolio_state()`, extended by
+  `portfolio/service.py::get_portfolio_view()` with per-position current
+  price/unrealized P&L via `data/pricing.py::_latest_price`)
+- `GET /portfolio` endpoint + frontend Portfolio page
+- No live broker sync worker or `portfolio_agent.py` digest — out of scope;
+  revisit only if a real need for a narrative digest (vs. raw numbers)
+  emerges
 
 **Milestone C — Risk Policy Engine**
 - `risk_policies`, `risk_evaluations` tables
@@ -577,11 +589,10 @@ Building on what already exists (scanner, thesis agent, paper trading loop, IBKR
 - Dashboard: Trade Approval Queue view
 - Still writes to `paper_adapter` only — no live IBKR order placement yet, to validate the full pipeline safely
 
-**Milestone E — Live Execution (IBKR)**
-- `broker/ibkr_adapter.py` write path: `place_order`, `get_order_status`, `cancel_order`
-- Order status poller worker
-- Explicit "you are about to place a REAL order" confirmation UX, IBKR paper account used for staging before any real-money test
-- This milestone should not ship until Milestones C and D have run against paper trading for a meaningful stretch (weeks, not days) with no risk-engine bugs found
+**Milestone E — Live Execution (IBKR)** — SUPERSEDED, dropped
+- Replaced by manual TradingView execution (part of Milestone D's scope —
+  `manual_execution/service.py`, already built). No live broker order API is
+  planned; see §9.
 
 **Milestone F — Audit Log & Dashboard polish**
 - `audit_log` table, `/audit` endpoint, Agent Activity Log view

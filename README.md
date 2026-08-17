@@ -1,6 +1,6 @@
 # Stock Broker
 
-AI-powered stock scanning and research assistant. Scans a universe of stocks daily, scores them on momentum/volume/relative-strength signals, and generates OpenAI-powered research theses — with paper trading and human-approved live trading planned for later phases.
+AI-powered stock scanning and research assistant. Scans a universe of stocks daily, scores them on momentum/volume/relative-strength signals, and generates OpenAI-powered research theses — with paper trading and human-directed manual execution via TradingView.
 
 > **Phase status:** Phase 1 (scanner + watchlist) and Phase 2 (AI thesis) are complete. Phase 3 (paper trading) is scaffolded. No live trading is active.
 
@@ -16,20 +16,21 @@ Deployed on Railway, auto-deploying from `master`:
 ## Architecture
 
 ```
-Market data (yfinance / IBKR)
+Market data (yfinance)
         ↓
    Scanner Engine          — scores tickers on volume, momentum, RS, gap
         ↓
    Watchlist               — ranked list of flagged tickers
         ↓
    AI Thesis Agent         — OpenAI generates research thesis per ticker
-   + Finnhub News          — recent headlines fed into the prompt
+   + Finnhub News + SEC EDGAR filings — recent headlines/filings fed into the prompt
         ↓
-   Paper Trading           — simulated trades, pending human approval
+   Order Preview + Risk Engine — deterministic risk checks before any trade
         ↓
    Human Approval Layer    — required before any real order
         ↓
-   (Phase 4+) Live Trading via IBKR
+   Paper Trading (simulated) OR Manual TradingView Execution
+   (human trades manually in TradingView, self-reports the outcome)
 ```
 
 ## Stack
@@ -39,7 +40,7 @@ Market data (yfinance / IBKR)
 | API | Python 3.11 · FastAPI · SQLAlchemy · Alembic |
 | Database | PostgreSQL 16 |
 | AI | OpenAI (`gpt-4o`) |
-| Market data | yfinance (prototype) · IBKR Client Portal API |
+| Market data | yfinance |
 | News | Finnhub company news API |
 | Frontend | Next.js 15 · TypeScript · Tailwind · shadcn/ui |
 
@@ -50,7 +51,7 @@ apps/
   api/          FastAPI backend
     src/broker/
       ai/           ThesisAgent (OpenAI)
-      data/         yfinance, IBKR, Finnhub fetchers
+      data/         yfinance, Finnhub, SEC EDGAR fetchers
       models/       SQLAlchemy ORM models
       ranking/      Signal scoring engine
       routers/      FastAPI route handlers
@@ -110,15 +111,6 @@ npm run dev
 # → http://localhost:3000
 ```
 
-## IBKR Gateway (optional — required for live market data)
-
-1. Download IBKR Client Portal Gateway from interactivebrokers.com
-2. Run: `java -jar clientportal.gw/root/run.sh`
-3. Log in at https://localhost:5000 (browser, 2FA required)
-4. Keep running — the app pings `/v1/api/tickle` every 60 s to maintain the session
-
-> IBKR requires manual 2FA login on every startup. This cannot be automated.
-
 ## Key guardrails
 
 - No live trading code until Phase 4
@@ -152,8 +144,8 @@ Key endpoints:
 |---|---|---|
 | 1 | ✅ Done | Scanner + watchlist |
 | 2 | ✅ Done | AI thesis per ticker + Finnhub news |
-| 3 | 🔧 In progress | Paper trading with human approval |
-| 4 | Planned | Human-approved live trading via IBKR |
+| 3 | 🔧 In progress | Paper trading + manual TradingView execution, both with human approval |
+| 4 | Superseded | Was "human-approved live trading via IBKR" — dropped in favor of manual TradingView execution; Signal Alpha never places orders |
 | 5 | Planned | Limited automation with strict guardrails |
 
 ---

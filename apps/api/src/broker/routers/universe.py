@@ -13,7 +13,6 @@ router = APIRouter()
 class UniverseStats(BaseModel):
     total: int
     active: int
-    with_conid: int
     tickers_with_bars: int
 
 
@@ -21,10 +20,7 @@ class UniverseStats(BaseModel):
 def get_universe_stats(db: Session = Depends(get_db)) -> UniverseStats:
     total = db.scalar(select(func.count()).select_from(StockUniverse)) or 0
     active = db.scalar(select(func.count()).select_from(StockUniverse).where(StockUniverse.active == True)) or 0
-    with_conid = db.scalar(
-        select(func.count()).select_from(StockUniverse).where(StockUniverse.ibkr_conid != None)
-    ) or 0
     tickers_with_bars = db.scalar(
         select(func.count(func.distinct(PriceBar.ticker))).select_from(PriceBar)
     ) or 0
-    return UniverseStats(total=total, active=active, with_conid=with_conid, tickers_with_bars=tickers_with_bars)
+    return UniverseStats(total=total, active=active, tickers_with_bars=tickers_with_bars)

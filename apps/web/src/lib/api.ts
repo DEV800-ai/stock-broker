@@ -7,6 +7,7 @@ import type {
   OrderPreview,
   OrderPreviewDetail,
   PaperTrade,
+  Portfolio,
   ScanResult,
   ScanRun,
   StockThesis,
@@ -88,6 +89,8 @@ export const api = {
     apiFetch<{ url: string }>(`/api/v1/scanner/results/${ticker}/tradingview`),
 
   paperTrades: () => apiFetch<PaperTrade[]>("/api/v1/paper-trades"),
+
+  portfolio: () => apiFetch<Portfolio>("/api/v1/portfolio"),
 
   createPaperTrade: (body: {
     ticker: string;

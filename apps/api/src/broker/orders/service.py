@@ -1,10 +1,12 @@
 """Order preview creation and the human approval/rejection flow.
 
 Bridges the DB (portfolio state, thesis, price history) to the pure
-risk engine, then — on approval — executes through execution/paper_adapter.py.
-Live broker execution is not wired here; that lands with the IBKR adapter
-in a later milestone. Every preview and its risk evaluation is persisted,
-approved or not, so nothing proposed here is unaudited.
+risk engine, then — on approval — executes through execution/paper_adapter.py
+for paper trades, or hands off to manual_execution/service.py for
+execution_mode="manual_tradingview" (human trades manually in TradingView,
+then self-reports the outcome). There is no live broker execution path.
+Every preview and its risk evaluation is persisted, approved or not, so
+nothing proposed here is unaudited.
 """
 from dataclasses import asdict
 from datetime import date, datetime, timedelta
@@ -21,7 +23,6 @@ from broker.models.order import OrderPreview
 from broker.models.paper_trade import PaperTrade
 from broker.models.price_bar import PriceBar
 from broker.models.risk import AgentControl, RiskEvaluationRecord, RiskPolicy
-from broker.models.scan import ScanResult
 from broker.models.thesis import StockThesis
 from broker.models.universe import StockUniverse
 from broker.risk.engine import evaluate as evaluate_risk
@@ -62,20 +63,6 @@ class FillRejected(Exception):
 # ------------------------------------------------------------------
 # Context assembly
 # ------------------------------------------------------------------
-
-def _latest_price(db: Session, ticker: str) -> float | None:
-    scan = db.scalars(
-        select(ScanResult)
-        .where(ScanResult.ticker == ticker)
-        .order_by(desc(ScanResult.scan_date), desc(ScanResult.id))
-    ).first()
-    if scan and scan.price:
-        return scan.price
-    bar = db.scalars(
-        select(PriceBar).where(PriceBar.ticker == ticker).order_by(desc(PriceBar.bar_date))
-    ).first()
-    return bar.close if bar else None
-
 
 def _avg_daily_volume(db: Session, ticker: str, days: int = 20) -> float | None:
     bars = db.scalars(
@@ -123,11 +110,9 @@ def _agent_control(db: Session) -> AgentControl | None:
 
 
 def get_broker_adapter() -> BrokerAdapter:
-    """Always returns the paper adapter today. IBKRAdapter exists (execution/ibkr_adapter.py)
-    but this factory never selects it — Phase 4 wiring, when it lands, will branch on
-    preview.execution_mode / settings.enable_live_trading here, not scatter that check
-    through the approval flow. Until then, this is the only place that could route to
-    live execution, and it deliberately doesn't."""
+    """Always returns the paper adapter. There is no live execution path —
+    execution_mode="manual_tradingview" previews skip this factory entirely and are
+    settled via manual_execution/service.py once the human reports what happened."""
     return PaperAdapter()
 
 
@@ -263,7 +248,7 @@ def create_preview(
         raise InvalidOrderRequest(f"execution_mode must be one of {EXECUTION_MODES}, got {execution_mode!r}")
 
     if limit_price is None:
-        limit_price = _latest_price(db, ticker)
+        limit_price = latest_price(db, ticker)
         if limit_price is None:
             raise InvalidOrderRequest(f"No price available for {ticker}; provide limit_price explicitly")
 
