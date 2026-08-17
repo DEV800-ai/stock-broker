@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from broker.config import settings
@@ -98,14 +98,24 @@ def list_scan_results(
     limit: int = Query(default=50, le=200),
     db: Session = Depends(get_db),
 ) -> list[ScanResult]:
+    effective_date = scan_date
+    if effective_date is None:
+        effective_date = db.scalar(select(func.max(ScanResult.scan_date)))
+
+    # A scan can be re-triggered on the same day, leaving multiple rows per
+    # ticker for the same scan_date. Keep only the latest (highest id) row
+    # per ticker so re-runs don't surface as duplicate cards in Top Ideas.
+    latest_ids = select(func.max(ScanResult.id)).group_by(ScanResult.ticker)
+    if effective_date:
+        latest_ids = latest_ids.where(ScanResult.scan_date == effective_date)
+
     stmt = (
         select(ScanResult)
+        .where(ScanResult.id.in_(latest_ids))
         .where(ScanResult.composite_score >= min_score)
         .order_by(desc(ScanResult.composite_score))
         .limit(limit)
     )
-    if scan_date:
-        stmt = stmt.where(ScanResult.scan_date == scan_date)
     return list(db.scalars(stmt))
 
 
