@@ -62,12 +62,17 @@ class PaperTradingHealthReport:
     avg_entry_slippage_pct: float | None = None
 
 
-def build_paper_trading_health_report(db: Session, since: date | None = None) -> PaperTradingHealthReport:
+def build_paper_trading_health_report(
+    db: Session, since: date | None = None, until: date | None = None
+) -> PaperTradingHealthReport:
     since_dt = datetime.combine(since, datetime.min.time()) if since else None
+    until_dt = datetime.combine(until, datetime.min.time()) if until else None
 
     preview_stmt = select(OrderPreview)
     if since_dt:
         preview_stmt = preview_stmt.where(OrderPreview.created_at >= since_dt)
+    if until_dt:
+        preview_stmt = preview_stmt.where(OrderPreview.created_at < until_dt)
     previews = db.scalars(preview_stmt).all()
 
     preview_status_counts: dict[str, int] = {}
@@ -77,6 +82,8 @@ def build_paper_trading_health_report(db: Session, since: date | None = None) ->
     verdict_stmt = select(RiskEvaluationRecord)
     if since_dt:
         verdict_stmt = verdict_stmt.where(RiskEvaluationRecord.created_at >= since_dt)
+    if until_dt:
+        verdict_stmt = verdict_stmt.where(RiskEvaluationRecord.created_at < until_dt)
     evaluations = db.scalars(verdict_stmt).all()
 
     risk_verdict_counts: dict[str, int] = {}
@@ -86,6 +93,8 @@ def build_paper_trading_health_report(db: Session, since: date | None = None) ->
     trade_stmt = select(PaperTrade)
     if since_dt:
         trade_stmt = trade_stmt.where(PaperTrade.created_at >= since_dt)
+    if until_dt:
+        trade_stmt = trade_stmt.where(PaperTrade.created_at < until_dt)
     trades = db.scalars(trade_stmt).all()
 
     trade_status_counts: dict[str, int] = {}

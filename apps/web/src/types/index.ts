@@ -147,6 +147,45 @@ export interface Portfolio {
   positions: Position[];
 }
 
+export interface SourceBreakdown {
+  trade_count: number;
+  trade_status_counts: Record<string, number>;
+  closed_trade_count: number;
+  win_count: number;
+  win_rate: number | null;
+  avg_pnl_pct: number | null;
+  outcome_counts: Record<string, number>;
+}
+
+export interface PaperTradingHealthReport {
+  since: string | null;
+  generated_at: string;
+  earliest_activity: string | null;
+  days_of_history: number | null;
+  preview_count: number;
+  preview_status_counts: Record<string, number>;
+  risk_verdict_counts: Record<string, number>;
+  trade_count: number;
+  trade_status_counts: Record<string, number>;
+  fill_status_counts: Record<string, number>;
+  trade_source_counts: Record<string, number>;
+  by_source: Record<string, SourceBreakdown>;
+  closed_trade_count: number;
+  win_count: number;
+  win_rate: number | null;
+  avg_pnl_pct: number | null;
+  avg_entry_slippage_pct: number | null;
+}
+
+export interface PerformanceReview {
+  id: number;
+  period_start: string;
+  period_end: string;
+  generated_at: string;
+  triggered_by: string;
+  report: PaperTradingHealthReport;
+}
+
 export interface PaperTrade {
   id: number;
   ticker: string;

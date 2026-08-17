@@ -9,6 +9,7 @@ from broker.models.news import NewsItem
 from broker.models.order import OrderPreview
 from broker.models.paper_trade import PaperTrade
 from broker.models.risk import AgentControl, RiskEvaluationRecord, RiskPolicy
+from broker.models.performance_review import PerformanceReview
 
 __all__ = [
     "StockUniverse",
@@ -26,4 +27,5 @@ __all__ = [
     "AgentControl",
     "OrderPreview",
     "AuditLog",
+    "PerformanceReview",
 ]

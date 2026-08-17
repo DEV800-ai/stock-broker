@@ -7,6 +7,7 @@ import type {
   OrderPreview,
   OrderPreviewDetail,
   PaperTrade,
+  PerformanceReview,
   Portfolio,
   ScanResult,
   ScanRun,
@@ -91,6 +92,14 @@ export const api = {
   paperTrades: () => apiFetch<PaperTrade[]>("/api/v1/paper-trades"),
 
   portfolio: () => apiFetch<Portfolio>("/api/v1/portfolio"),
+
+  weeklyReviewLatest: () => apiFetch<PerformanceReview>("/api/v1/reports/weekly-review/latest"),
+
+  weeklyReviewHistory: (limit = 12) =>
+    apiFetch<PerformanceReview[]>(`/api/v1/reports/weekly-review?limit=${limit}`),
+
+  generateWeeklyReview: () =>
+    apiFetch<PerformanceReview>("/api/v1/reports/weekly-review/generate", { method: "POST" }),
 
   createPaperTrade: (body: {
     ticker: string;

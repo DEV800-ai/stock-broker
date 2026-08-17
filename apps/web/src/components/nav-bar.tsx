@@ -10,6 +10,7 @@ const LINKS = [
   { href: "/orders", label: "Orders" },
   { href: "/paper-trades", label: "Positions" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/reports", label: "Reports" },
   { href: "/agent-control", label: "Agent Control" },
   { href: "/help", label: "Help" },
 ];
