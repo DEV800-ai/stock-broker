@@ -240,6 +240,7 @@ def create_preview(
     order_type: str = "LIMIT",
     time_in_force: str = "DAY",
     execution_mode: str = "paper",
+    actor: str = "system",
 ) -> OrderPreview:
     ticker = ticker.upper()
     if action not in ("BUY", "SELL"):
@@ -293,7 +294,7 @@ def create_preview(
         rule_results_json=[asdict(r) for r in evaluation.results],
     ))
     audit_log(
-        db, actor="system", action="propose_trade", entity_type="order_preview", entity_id=preview.id,
+        db, actor=actor, action="propose_trade", entity_type="order_preview", entity_id=preview.id,
         details={"ticker": ticker, "action": action, "shares": shares, "verdict": evaluation.verdict},
     )
     db.commit()

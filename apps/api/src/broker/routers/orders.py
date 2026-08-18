@@ -61,7 +61,9 @@ class OpenTradingViewOut(BaseModel):
 
 
 @router.post("/orders/preview", response_model=OrderPreviewDetailOut, status_code=201)
-def preview_order(body: CreateOrderPreviewRequest, db: Session = Depends(get_db)) -> dict:
+def preview_order(
+    body: CreateOrderPreviewRequest, db: Session = Depends(get_db), actor: str = Depends(require_actor)
+) -> dict:
     try:
         preview = service.create_preview(
             db,
@@ -75,6 +77,7 @@ def preview_order(body: CreateOrderPreviewRequest, db: Session = Depends(get_db)
             order_type=body.order_type,
             time_in_force=body.time_in_force,
             execution_mode=body.execution_mode,
+            actor=actor,
         )
     except service.InvalidOrderRequest as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
