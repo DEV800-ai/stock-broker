@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     scanner_min_score: float = 0.30
     thesis_min_score: float = 0.50
     thesis_recheck_max_age_hours: int = 24
+    # Holding horizon the thesis agent is told to calibrate its reasoning and
+    # confidence to — this app is paper-trading/swing-oriented, not day-trading.
+    thesis_target_horizon: str = "1-3 months"
     scanner_universe_size: int = 500
     # A scan can legitimately run 60-90+ min for the full universe. Only let
     # delete_scan_run clear a still-"running" run once it's been running
