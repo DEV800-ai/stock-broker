@@ -152,6 +152,11 @@ function TradeRow({ trade: t, children, error }: { trade: PaperTrade; children?:
           <Badge variant={STATUS_VARIANTS[t.status] ?? "outline"}>
             {t.status.replace("_", " ")}
           </Badge>
+          {t.source === "manual_tradingview" && (
+            <Badge variant="warning" title="Self-reported outcome from a manual TradingView trade — not verified against a broker.">
+              Self-reported · not broker-verified
+            </Badge>
+          )}
         </div>
 
         {/* prices */}

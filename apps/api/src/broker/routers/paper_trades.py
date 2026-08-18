@@ -23,6 +23,7 @@ class PaperTradeOut(BaseModel):
     stop_price: float | None
     shares: int | None
     status: str
+    source: str
     approved_by: str | None
     approved_at: datetime | None
     exit_price: float | None

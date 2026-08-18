@@ -199,6 +199,7 @@ export interface PaperTrade {
   stop_price: number | null;
   shares: number | null;
   status: PaperTradeStatus;
+  source: string;
   approved_by: string | null;
   approved_at: string | null;
   exit_price: number | null;

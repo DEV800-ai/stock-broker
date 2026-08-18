@@ -76,9 +76,13 @@ function PositionRow({ position: p }: { position: Position }) {
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
       <div className="flex items-center gap-2 min-w-[120px]">
         <span className="font-mono font-semibold text-sm">{p.ticker}</span>
-        <Badge variant="outline" className="text-xs">
-          {p.source === "manual_tradingview" ? "TradingView" : "Paper"}
-        </Badge>
+        {p.source === "manual_tradingview" ? (
+          <Badge variant="warning" className="text-xs" title="Self-reported outcome from a manual TradingView trade — not verified against a broker.">
+            Self-reported · not broker-verified
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-xs">Paper</Badge>
+        )}
       </div>
 
       <div className="flex gap-4 text-xs text-muted-foreground flex-1 font-mono">
