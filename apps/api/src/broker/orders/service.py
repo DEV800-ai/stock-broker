@@ -29,6 +29,11 @@ from broker.risk.engine import evaluate as evaluate_risk
 from broker.risk.types import PortfolioState, RiskContext, RiskPolicyParams, TradeProposal
 
 EXECUTION_MODES = ("paper", "manual_tradingview")
+# MVP only ever fills against limit_price (see execution/paper_adapter.py) — no MARKET
+# order semantics exist anywhere in the fill simulation, so MARKET is rejected here
+# rather than silently accepted and treated as LIMIT.
+ORDER_TYPES = ("LIMIT",)
+TIME_IN_FORCE_VALUES = ("DAY", "GTC")
 
 
 class OrderPreviewNotFound(Exception):
@@ -177,13 +182,19 @@ def _recent_losses(db: Session, ticker: str) -> int:
 
 
 def build_risk_context(
-    db: Session, ticker: str, action: str, shares: int, limit_price: float, thesis_id: int | None
+    db: Session,
+    ticker: str,
+    action: str,
+    shares: int,
+    limit_price: float,
+    thesis_id: int | None,
+    order_type: str = "LIMIT",
 ) -> RiskContext:
     has_thesis = bool(thesis_id and db.get(StockThesis, thesis_id))
     proposal = TradeProposal(
         ticker=ticker,
         action=action,
-        order_type="LIMIT",
+        order_type=order_type,
         shares=shares,
         limit_price=limit_price,
         estimated_value=shares * limit_price,
@@ -247,6 +258,12 @@ def create_preview(
         raise InvalidOrderRequest(f"action must be BUY or SELL, got {action!r}")
     if execution_mode not in EXECUTION_MODES:
         raise InvalidOrderRequest(f"execution_mode must be one of {EXECUTION_MODES}, got {execution_mode!r}")
+    if order_type not in ORDER_TYPES:
+        raise InvalidOrderRequest(f"order_type must be one of {ORDER_TYPES}, got {order_type!r}")
+    if time_in_force not in TIME_IN_FORCE_VALUES:
+        raise InvalidOrderRequest(
+            f"time_in_force must be one of {TIME_IN_FORCE_VALUES}, got {time_in_force!r}"
+        )
 
     if limit_price is None:
         limit_price = latest_price(db, ticker)
@@ -262,7 +279,7 @@ def create_preview(
                 f"amount_usd {amount_usd} does not buy at least 1 share at limit_price {limit_price}"
             )
 
-    ctx = build_risk_context(db, ticker, action, shares, limit_price, thesis_id)
+    ctx = build_risk_context(db, ticker, action, shares, limit_price, thesis_id, order_type=order_type)
     evaluation = evaluate_risk(ctx)
 
     thesis = db.get(StockThesis, thesis_id) if thesis_id else None
@@ -340,7 +357,8 @@ def approve_preview(db: Session, preview_id: int, approved_by: str = "human") ->
     # preview was created — re-run the risk engine now, not just at preview time, so a
     # still-fresh (within-TTL) preview can't slip past a rule that would now block it.
     reeval_ctx = build_risk_context(
-        db, preview.ticker, preview.action, preview.shares, preview.limit_price, preview.thesis_id
+        db, preview.ticker, preview.action, preview.shares, preview.limit_price, preview.thesis_id,
+        order_type=preview.order_type,
     )
     reevaluation = evaluate_risk(reeval_ctx)
     db.add(RiskEvaluationRecord(
