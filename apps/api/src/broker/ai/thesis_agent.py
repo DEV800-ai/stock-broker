@@ -83,6 +83,10 @@ def _build_user_prompt(ticker: str, scan: ScanResult | None, news_text: str = ""
             f"5-day change: {_fmt(scan.pct_change_5d and scan.pct_change_5d * 100)}%",
             f"20-day change: {_fmt(scan.pct_change_20d and scan.pct_change_20d * 100)}%",
             f"RSI-14: {_fmt(scan.rsi_14)}",
+            f"MACD (12,26,9): line={_fmt(scan.macd)}, signal={_fmt(scan.macd_signal)}, "
+            f"histogram={_fmt(scan.macd_histogram)}",
+            f"Bollinger Bands (20, 2σ): upper={_fmt(scan.bb_upper)}, lower={_fmt(scan.bb_lower)}, "
+            f"%B={_fmt(scan.bb_percent_b)} (0=at lower band, 1=at upper band)",
             f"Volume ratio (vs 20-day avg): {_fmt(scan.volume_ratio)}x",
             f"Above SMA-50: {scan.above_sma50}",
             f"Above SMA-200: {scan.above_sma200}",

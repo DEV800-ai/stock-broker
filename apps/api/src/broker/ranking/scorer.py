@@ -19,6 +19,34 @@ def _rsi(closes: pd.Series, period: int = 14) -> float | None:
     return float(val) if not math.isnan(val) else None
 
 
+def _macd(
+    closes: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9
+) -> tuple[float | None, float | None, float | None]:
+    if len(closes) < slow + signal:
+        return None, None, None
+    macd_line = closes.ewm(span=fast, adjust=False).mean() - closes.ewm(span=slow, adjust=False).mean()
+    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+    histogram = macd_line - signal_line
+    return float(macd_line.iloc[-1]), float(signal_line.iloc[-1]), float(histogram.iloc[-1])
+
+
+def _bollinger_bands(
+    closes: pd.Series, period: int = 20, num_std: float = 2.0
+) -> tuple[float | None, float | None, float | None]:
+    """Returns (upper, lower, percent_b). percent_b is where price sits within the bands:
+    0.0 = at the lower band, 1.0 = at the upper band, can fall outside [0, 1]."""
+    if len(closes) < period:
+        return None, None, None
+    window = closes.tail(period)
+    mean = float(window.mean())
+    std = float(window.std())
+    upper = mean + num_std * std
+    lower = mean - num_std * std
+    price = float(closes.iloc[-1])
+    percent_b = (price - lower) / (upper - lower) if upper != lower else None
+    return upper, lower, percent_b
+
+
 def compute_scores(bars: pd.DataFrame, sector_bars: pd.DataFrame | None = None) -> dict:
     """Compute all signal scores from a DataFrame of daily OHLCV bars.
 
@@ -46,6 +74,8 @@ def compute_scores(bars: pd.DataFrame, sector_bars: pd.DataFrame | None = None) 
     sma200 = float(closes.tail(200).mean()) if len(closes) >= 200 else None
 
     rsi_14 = _rsi(closes)
+    macd, macd_signal, macd_histogram = _macd(closes)
+    bb_upper, bb_lower, bb_percent_b = _bollinger_bands(closes)
 
     avg_vol_20 = float(volumes.tail(21).iloc[:-1].mean()) if len(volumes) >= 21 else None
     today_vol = float(today["volume"]) if today["volume"] else 0.0
@@ -84,6 +114,12 @@ def compute_scores(bars: pd.DataFrame, sector_bars: pd.DataFrame | None = None) 
         signals["gap_up"] = True
     if above_sma50 and above_sma200:
         signals["above_both_smas"] = True
+    if macd is not None and macd_signal is not None and macd > macd_signal and (macd_histogram or 0) > 0:
+        signals["macd_bullish"] = True
+    if bb_percent_b is not None and bb_percent_b >= 1.0:
+        signals["above_upper_band"] = True
+    elif bb_percent_b is not None and bb_percent_b <= 0.0:
+        signals["below_lower_band"] = True
 
     return {
         "price": price,
@@ -95,6 +131,12 @@ def compute_scores(bars: pd.DataFrame, sector_bars: pd.DataFrame | None = None) 
         "sma50": sma50,
         "sma200": sma200,
         "rsi_14": rsi_14,
+        "macd": macd,
+        "macd_signal": macd_signal,
+        "macd_histogram": macd_histogram,
+        "bb_upper": bb_upper,
+        "bb_lower": bb_lower,
+        "bb_percent_b": bb_percent_b,
         "above_sma50": above_sma50,
         "above_sma200": above_sma200,
         "volume_score": volume_score,
