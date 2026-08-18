@@ -41,7 +41,17 @@ class ScanRunner:
             tickers = self._active_tickers()
             logger.info("Scanning %d tickers", len(tickers))
 
-            self._fetch_and_store_bars(tickers)
+            run.total_tickers = len(tickers)
+            run.phase = "fetching_bars"
+            run.tickers_processed = 0
+            self.db.commit()
+
+            self._fetch_and_store_bars(tickers, run_id)
+
+            run = self.db.get(ScanRun, run_id)
+            run.phase = "scoring"
+            run.tickers_processed = 0
+            self.db.commit()
 
             sector_bars_cache = self._load_sector_bars()
             results = self._score_all(tickers, sector_bars_cache, run_id)
@@ -102,7 +112,13 @@ class ScanRunner:
         )
         return list(rows)
 
-    def _fetch_and_store_bars(self, tickers: list[str]) -> None:
+    def _bump_progress(self, run_id: int, processed: int) -> None:
+        run = self.db.get(ScanRun, run_id)
+        if run is not None:
+            run.tickers_processed = processed
+            self.db.commit()
+
+    def _fetch_and_store_bars(self, tickers: list[str], run_id: int) -> None:
         for i in range(0, len(tickers), _BATCH_SIZE):
             batch = tickers[i : i + _BATCH_SIZE]
             logger.debug("Fetching bars for batch %d–%d", i, i + len(batch))
@@ -136,6 +152,7 @@ class ScanRunner:
                     )
                     self.db.execute(stmt)
             self.db.commit()
+            self._bump_progress(run_id, min(i + len(batch), len(tickers)))
 
     def _load_sector_bars(self) -> dict[str, object]:
         """Load price bar DataFrames for all sector ETFs from DB."""
@@ -163,7 +180,7 @@ class ScanRunner:
         )
 
         results: list[ScanResult] = []
-        for ticker in tickers:
+        for idx, ticker in enumerate(tickers, start=1):
             rows = self.db.execute(
                 select(
                     PriceBar.bar_date,
@@ -199,7 +216,12 @@ class ScanRunner:
             self.db.add(result)
             results.append(result)
 
+            if idx % _BATCH_SIZE == 0:
+                self.db.commit()
+                self._bump_progress(run_id, idx)
+
         self.db.commit()
+        self._bump_progress(run_id, len(tickers))
         # refresh to get IDs
         for r in results:
             self.db.refresh(r)

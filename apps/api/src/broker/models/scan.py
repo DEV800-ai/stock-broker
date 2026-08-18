@@ -19,6 +19,13 @@ class ScanRun(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     params_json: Mapped[dict | None] = mapped_column(JSONB)
 
+    # Live progress, updated periodically while status == "running" (see
+    # scanner/runner.py). Both reset to 0 when phase changes; total_tickers
+    # is set once, right after the universe is loaded.
+    phase: Mapped[str | None] = mapped_column(String(20))  # fetching_bars|scoring
+    total_tickers: Mapped[int | None] = mapped_column(Integer)
+    tickers_processed: Mapped[int | None] = mapped_column(Integer)
+
 
 class ScanResult(Base):
     __tablename__ = "scan_results"

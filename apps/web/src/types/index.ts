@@ -35,6 +35,9 @@ export interface ScanRun {
   status: ScanRunStatus;
   tickers_scanned: number | null;
   tickers_flagged: number | null;
+  phase: "fetching_bars" | "scoring" | null;
+  total_tickers: number | null;
+  tickers_processed: number | null;
 }
 
 export interface ScanResult {

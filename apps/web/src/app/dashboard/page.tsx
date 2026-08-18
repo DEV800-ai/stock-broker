@@ -25,11 +25,16 @@ export default function DashboardPage() {
     if (u.status === "fulfilled") setUniverse(u.value);
   }
 
+  const isRunning = runs[0]?.status === "running";
+
   useEffect(() => {
     load();
-    const interval = setInterval(load, 60_000);
-    return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const interval = setInterval(load, isRunning ? 3_000 : 60_000);
+    return () => clearInterval(interval);
+  }, [isRunning]);
 
   async function handleTriggerScan() {
     setScanning(true);
@@ -74,22 +79,25 @@ export default function DashboardPage() {
         <CardHeader>
           <CardTitle className="text-sm font-medium text-muted-foreground">Last Scan</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           {lastRun ? (
-            <div className="flex items-center gap-4 text-sm">
-              <Badge variant={lastRun.status === "complete" ? "success" : lastRun.status === "running" ? "secondary" : "destructive"}>
-                {lastRun.status}
-              </Badge>
-              <span className="font-mono text-muted-foreground">{formatUtc(lastRun.started_at)}</span>
-              {lastRun.tickers_scanned != null && (
-                <span className="font-mono">{lastRun.tickers_scanned} scanned · {lastRun.tickers_flagged} flagged</span>
-              )}
-              {lastRun.status !== "complete" && (
-                <Button variant="ghost" size="sm" className="ml-auto" onClick={() => handleClearRun(lastRun.id)}>
-                  Clear
-                </Button>
-              )}
-            </div>
+            <>
+              <div className="flex items-center gap-4 text-sm">
+                <Badge variant={lastRun.status === "complete" ? "success" : lastRun.status === "running" ? "secondary" : "destructive"}>
+                  {lastRun.status}
+                </Badge>
+                <span className="font-mono text-muted-foreground">{formatUtc(lastRun.started_at)}</span>
+                {lastRun.tickers_scanned != null && (
+                  <span className="font-mono">{lastRun.tickers_scanned} scanned · {lastRun.tickers_flagged} flagged</span>
+                )}
+                {lastRun.status !== "complete" && (
+                  <Button variant="ghost" size="sm" className="ml-auto" onClick={() => handleClearRun(lastRun.id)}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+              {lastRun.status === "running" && <ScanProgressBar run={lastRun} />}
+            </>
           ) : (
             <p className="text-sm text-muted-foreground">No scans yet. Trigger a scan to start.</p>
           )}
@@ -124,6 +132,37 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+const PHASE_LABELS: Record<string, string> = {
+  fetching_bars: "Fetching price data",
+  scoring: "Scoring tickers",
+};
+
+function ScanProgressBar({ run }: { run: ScanRun }) {
+  const { phase, total_tickers, tickers_processed } = run;
+  if (!phase || !total_tickers) {
+    return <p className="text-xs text-muted-foreground">Starting…</p>;
+  }
+  const processed = tickers_processed ?? 0;
+  // Two equal-weighted phases (fetch, then score) over the same ticker list.
+  const phaseIndex = phase === "scoring" ? 1 : 0;
+  const pct = Math.min(100, ((phaseIndex + processed / total_tickers) / 2) * 100);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>{PHASE_LABELS[phase] ?? phase}</span>
+        <span className="font-mono">{processed}/{total_tickers} · {pct.toFixed(0)}%</span>
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-primary transition-all duration-500"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   );
 }

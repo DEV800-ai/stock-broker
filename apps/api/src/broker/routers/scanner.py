@@ -25,6 +25,9 @@ class ScanRunOut(BaseModel):
     status: str
     tickers_scanned: int | None
     tickers_flagged: int | None
+    phase: str | None
+    total_tickers: int | None
+    tickers_processed: int | None
 
     model_config = {"from_attributes": True}
 
