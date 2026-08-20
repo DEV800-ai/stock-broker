@@ -15,14 +15,14 @@ const LINKS = [
   { href: "/help", label: "Help" },
 ];
 
-export function NavBar() {
+export function NavBar({ userEmail }: { userEmail: string | null }) {
   const pathname = usePathname();
 
   return (
     <header className="border-b border-border bg-background px-6 py-3">
       <div className="mx-auto flex max-w-7xl items-center gap-6">
         <span className="font-mono text-sm font-semibold tracking-wide text-foreground">Stock Broker</span>
-        <nav className="flex gap-4 text-sm">
+        <nav className="flex flex-1 gap-4 text-sm">
           {LINKS.map((link) => {
             const active = pathname === link.href || pathname?.startsWith(`${link.href}/`);
             return (
@@ -39,6 +39,16 @@ export function NavBar() {
             );
           })}
         </nav>
+        {userEmail && (
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span>{userEmail}</span>
+            <form action="/api/auth/logout" method="POST">
+              <button type="submit" className="transition-colors hover:text-foreground">
+                Sign out
+              </button>
+            </form>
+          </div>
+        )}
       </div>
     </header>
   );

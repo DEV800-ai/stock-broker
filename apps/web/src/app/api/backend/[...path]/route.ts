@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/session";
 
 // Server-only — never prefixed with NEXT_PUBLIC_, so it never reaches the browser bundle.
 // The FastAPI backend still validates X-API-Key on every non-/health route; this proxy is
@@ -30,13 +31,20 @@ function isHumanGated(method: string, path: string[]): boolean {
 }
 
 async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
-  const target = new URL(`/${path.join("/")}${req.nextUrl.search}`, API_URL);
+  const joined = path.join("/");
+  const target = new URL(`/${joined}${req.nextUrl.search}`, API_URL);
+
+  // Real login (Google OAuth) identifies who is acting — the browser can no longer assert
+  // its own actor via a header. /health is exempt to match the backend's own auth rule.
+  const session = joined === "api/v1/health" ? null : await getSession();
+  if (joined !== "api/v1/health" && !session) {
+    return NextResponse.json({ detail: "Not authenticated" }, { status: 401 });
+  }
 
   const headers = new Headers();
   headers.set("Content-Type", req.headers.get("content-type") ?? "application/json");
   headers.set("X-API-Key", API_KEY);
-  const actor = req.headers.get("x-actor");
-  if (actor) headers.set("X-Actor", actor);
+  if (session) headers.set("X-Actor", session.email);
   if (HUMAN_APPROVAL_KEY && isHumanGated(req.method, path)) {
     headers.set("X-Human-Key", HUMAN_APPROVAL_KEY);
   }

@@ -21,14 +21,14 @@ import type {
 // attaches X-API-Key server-side, so the key never ships in browser JS — see that route's
 // comment for why. Do not reintroduce a NEXT_PUBLIC_API_KEY here.
 const API_BASE = "/api/backend";
-const ACTOR = process.env.NEXT_PUBLIC_ACTOR ?? "operator";
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  // Actor identity now comes from the signed-in session (see src/lib/session.ts), attached
+  // server-side by the /api/backend proxy — the browser no longer asserts its own actor.
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      "X-Actor": ACTOR,
       ...init?.headers,
     },
   });
