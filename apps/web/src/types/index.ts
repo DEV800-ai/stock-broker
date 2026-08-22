@@ -86,6 +86,15 @@ export interface StockThesis {
   news_score: number | null;
 }
 
+export interface TrackedTicker {
+  id: number;
+  ticker: string;
+  notes: string | null;
+  created_at: string;
+  latest_price: number | null;
+  latest_composite_score: number | null;
+}
+
 export interface OrderPreview {
   id: number;
   ticker: string;

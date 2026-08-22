@@ -12,6 +12,7 @@ import type {
   ScanResult,
   ScanRun,
   StockThesis,
+  TrackedTicker,
   UniverseStats,
   WatchlistEntry,
 } from "@/types";
@@ -190,4 +191,23 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ mode }),
     }),
+
+  trackedTickers: () => apiFetch<TrackedTicker[]>("/api/v1/tracked-tickers"),
+
+  addTrackedTicker: (ticker: string, notes?: string) =>
+    apiFetch<TrackedTicker>("/api/v1/tracked-tickers", {
+      method: "POST",
+      body: JSON.stringify({ ticker, notes }),
+    }),
+
+  removeTrackedTicker: (ticker: string) =>
+    apiFetch<void>(`/api/v1/tracked-tickers/${ticker}`, { method: "DELETE" }),
+
+  generateAnalysis: (ticker: string) =>
+    apiFetch<{ message: string }>("/api/v1/analysis/generate", {
+      method: "POST",
+      body: JSON.stringify({ ticker }),
+    }),
+
+  analysis: (ticker: string) => apiFetch<StockThesis>(`/api/v1/analysis/${ticker}`),
 };

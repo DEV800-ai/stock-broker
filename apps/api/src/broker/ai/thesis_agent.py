@@ -127,10 +127,33 @@ class ThesisAgent:
         self.db = db
         self._client = OpenAI(api_key=settings.openai_api_key)
 
-    def generate(self, ticker: str, scan_result_id: int | None = None, force_refresh: bool = False) -> StockThesis:
-        scan = self._load_scan(scan_result_id, ticker)
+    def generate(
+        self,
+        ticker: str,
+        scan_result_id: int | None = None,
+        force_refresh: bool = False,
+        *,
+        adhoc: bool = False,
+    ) -> StockThesis:
+        """Generate (or return cached) research output for a ticker.
 
-        if scan and scan.composite_score is not None and scan.composite_score < settings.thesis_min_score:
+        adhoc=True is for the user-driven "AI Analysis" tab: any ticker symbol, not just
+        ones in the scanned universe, and it skips the composite_score gate below — that
+        gate only applies to the scanner/watchlist-driven thesis flow (see CLAUDE.md's
+        "Thesis only generated for tickers with composite_score > thesis_min_score" rule).
+        Logged under a distinct AgentRun.agent value so the two flows never share a cache.
+        """
+        agent_name = "adhoc_analysis" if adhoc else "thesis_agent"
+        scan = self._load_scan(scan_result_id, ticker)
+        if scan is None and adhoc:
+            scan = self._fetch_live_scan(ticker)
+
+        if (
+            not adhoc
+            and scan
+            and scan.composite_score is not None
+            and scan.composite_score < settings.thesis_min_score
+        ):
             raise ValueError(
                 f"{ticker} composite_score {scan.composite_score:.3f} is below "
                 f"thesis_min_score {settings.thesis_min_score}"
@@ -141,9 +164,9 @@ class ThesisAgent:
         ihash = _input_hash(ticker, today, signals)
 
         if not force_refresh:
-            cached = self._find_cached(ticker, ihash)
+            cached = self._find_cached(ticker, ihash, agent_name)
             if cached:
-                logger.info("Returning cached thesis for %s (hash=%s)", ticker, ihash[:8])
+                logger.info("Returning cached %s for %s (hash=%s)", agent_name, ticker, ihash[:8])
                 return cached
 
         articles = fetch_company_news(ticker)
@@ -160,7 +183,7 @@ class ThesisAgent:
         input_json = {"ticker": ticker, "scan_result_id": scan_result_id, "prompt": user_prompt}
 
         run = AgentRun(
-            agent="thesis_agent",
+            agent=agent_name,
             ticker=ticker,
             input_hash=ihash,
             input_json=input_json,
@@ -194,10 +217,10 @@ class ThesisAgent:
             .order_by(desc(ScanResult.scan_date), desc(ScanResult.id))
         ).first()
 
-    def _find_cached(self, ticker: str, ihash: str) -> StockThesis | None:
+    def _find_cached(self, ticker: str, ihash: str, agent_name: str = "thesis_agent") -> StockThesis | None:
         run = self.db.scalars(
             select(AgentRun)
-            .where(AgentRun.agent == "thesis_agent")
+            .where(AgentRun.agent == agent_name)
             .where(AgentRun.ticker == ticker)
             .where(AgentRun.input_hash == ihash)
             .where(AgentRun.error == None)  # noqa: E711
@@ -210,6 +233,22 @@ class ThesisAgent:
             .where(StockThesis.ticker == ticker)
             .order_by(desc(StockThesis.generated_at))
         ).first()
+
+    def _fetch_live_scan(self, ticker: str) -> ScanResult | None:
+        """Fetch bars and score them live for a ticker with no persisted ScanResult
+        (i.e. outside the scanned universe). Returned object is transient — never
+        added to the session — so it carries no id and StockThesis.scan_result_id
+        stays null when built from it, same as the "no scan data" case."""
+        from broker.data.yfinance_data import get_bars
+        from broker.ranking.scorer import compute_scores
+
+        bars = get_bars(ticker, days=220)
+        if bars.empty:
+            return None
+        scores = compute_scores(bars)
+        if not scores:
+            return None
+        return ScanResult(ticker=ticker, scan_date=date.today(), **scores)
 
     def _request_thesis(
         self, run: AgentRun, user_prompt: str, retry_note: str | None = None

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from broker.auth import require_actor
 from broker.routers import (
     agent_control,
+    analysis,
     audit,
     health,
     manual_execution,
@@ -15,6 +16,7 @@ from broker.routers import (
     reports,
     scanner,
     thesis,
+    tracked_tickers,
     universe,
     watchlist,
 )
@@ -51,3 +53,5 @@ app.include_router(manual_execution.router, prefix=PREFIX, tags=["manual-executi
 app.include_router(audit.router, prefix=PREFIX, tags=["audit"], dependencies=AUTH)
 app.include_router(reports.router, prefix=PREFIX, tags=["reports"], dependencies=AUTH)
 app.include_router(agent_control.router, prefix=PREFIX, tags=["agent-control"], dependencies=AUTH)
+app.include_router(analysis.router, prefix=PREFIX, tags=["analysis"], dependencies=AUTH)
+app.include_router(tracked_tickers.router, prefix=PREFIX, tags=["tracked-tickers"], dependencies=AUTH)

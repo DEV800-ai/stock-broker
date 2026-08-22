@@ -1,28 +1,35 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
 import { formatUtc } from "@/lib/utils";
-import type { HealthStatus, ScanRun, UniverseStats } from "@/types";
+import type { AgentControl, HealthStatus, ScanResult, ScanRun, UniverseStats } from "@/types";
 
 export default function DashboardPage() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [runs, setRuns] = useState<ScanRun[]>([]);
   const [universe, setUniverse] = useState<UniverseStats | null>(null);
+  const [agentControl, setAgentControl] = useState<AgentControl | null>(null);
+  const [topIdeas, setTopIdeas] = useState<ScanResult[]>([]);
   const [scanning, setScanning] = useState(false);
 
   async function load() {
-    const [h, r, u] = await Promise.allSettled([
+    const [h, r, u, a, s] = await Promise.allSettled([
       api.health(),
       api.scanRuns(5),
       api.universe(),
+      api.agentControl(),
+      api.scanResults({ limit: 5 }),
     ]);
     if (h.status === "fulfilled") setHealth(h.value);
     if (r.status === "fulfilled") setRuns(r.value);
     if (u.status === "fulfilled") setUniverse(u.value);
+    if (a.status === "fulfilled") setAgentControl(a.value);
+    if (s.status === "fulfilled") setTopIdeas(s.value);
   }
 
   const isRunning = runs[0]?.status === "running";
@@ -62,16 +69,62 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Dashboard</h1>
         <Button onClick={handleTriggerScan} disabled={scanning} size="sm">
-          {scanning ? "Triggering…" : "Run Scan Now"}
+          {scanning ? "Triggering…" : "Run New Scan"}
         </Button>
       </div>
 
-      {/* System status */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatusTile label="Database" ok={health?.db} />
-        <StatusTile label="Market Data" ok={health?.market_data} />
-        <StatusTile label="OpenAI" ok={health?.ai} />
-        <StatTile label="Universe" value={universe ? `${universe.active} tickers · ${universe.tickers_with_bars} with bars` : "—"} />
+      {/* Market Data + Agent Status */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Market Data</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-3 gap-4">
+            <StatusTile label="Database" ok={health?.db} />
+            <StatusTile label="Market Data" ok={health?.market_data} />
+            <StatusTile label="OpenAI" ok={health?.ai} />
+            <div className="col-span-3">
+              <p className="text-xs text-muted-foreground">Universe</p>
+              <p className="mt-1 font-mono text-sm font-medium">
+                {universe ? `${universe.active} tickers · ${universe.tickers_with_bars} with bars` : "—"}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Agent Status</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {agentControl ? (
+              <>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Kill switch:</span>
+                  <Badge variant={agentControl.is_killed ? "destructive" : "success"}>
+                    {agentControl.is_killed ? "Killed" : "Active"}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">Autonomy mode:</span>
+                  <span className="font-mono">{agentControl.autonomy_mode}</span>
+                </div>
+                {agentControl.is_killed && agentControl.killed_reason && (
+                  <p className="text-xs text-muted-foreground">Reason: {agentControl.killed_reason}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Manage from the{" "}
+                  <Link href="/agent-control" className="underline hover:text-foreground">
+                    Agent Control
+                  </Link>{" "}
+                  page.
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">—</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Last scan */}
@@ -104,34 +157,35 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      {/* Recent runs */}
-      {runs.length > 1 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-muted-foreground">Recent Runs</CardTitle>
-          </CardHeader>
-          <CardContent>
+      {/* Top 5 Ideas */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium text-muted-foreground">Top 5 Ideas</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {topIdeas.length > 0 ? (
             <div className="space-y-2">
-              {runs.slice(1).map((run) => (
-                <div key={run.id} className="flex items-center gap-3 text-sm">
-                  <Badge variant={run.status === "complete" ? "outline" : "secondary"} className="text-xs">
-                    {run.status}
-                  </Badge>
-                  <span className="font-mono text-muted-foreground">{formatUtc(run.started_at)}</span>
-                  {run.tickers_flagged != null && (
-                    <span className="font-mono text-muted-foreground">{run.tickers_flagged} flagged</span>
-                  )}
-                  {run.status !== "complete" && (
-                    <Button variant="ghost" size="sm" className="ml-auto h-6 px-2 text-xs" onClick={() => handleClearRun(run.id)}>
-                      Clear
-                    </Button>
-                  )}
-                </div>
+              {topIdeas.map((r) => (
+                <Link
+                  key={r.id}
+                  href="/ideas"
+                  className="flex items-center gap-4 rounded-md px-2 py-2 text-sm transition-colors hover:bg-muted"
+                >
+                  <span className="w-16 font-mono font-medium">{r.ticker}</span>
+                  <span className="font-mono text-muted-foreground">
+                    {r.price != null ? `$${r.price.toFixed(2)}` : "—"}
+                  </span>
+                  <span className="ml-auto font-mono text-muted-foreground">
+                    score {r.composite_score != null ? r.composite_score.toFixed(2) : "—"}
+                  </span>
+                </Link>
               ))}
             </div>
-          </CardContent>
-        </Card>
-      )}
+          ) : (
+            <p className="text-sm text-muted-foreground">No scan results yet. Trigger a scan to populate ideas.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -169,25 +223,12 @@ function ScanProgressBar({ run }: { run: ScanRun }) {
 
 function StatusTile({ label, ok }: { label: string; ok?: boolean }) {
   return (
-    <Card>
-      <CardContent className="py-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <div className="mt-1 flex items-center gap-1.5">
-          <span className={`h-2 w-2 rounded-full ${ok === true ? "bg-emerald-400" : ok === false ? "bg-rose-400" : "bg-muted-foreground/40"}`} />
-          <span className="text-sm font-medium">{ok === true ? "Online" : ok === false ? "Offline" : "—"}</span>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function StatTile({ label, value }: { label: string; value: string }) {
-  return (
-    <Card>
-      <CardContent className="py-4">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="mt-1 font-mono text-sm font-medium">{value}</p>
-      </CardContent>
-    </Card>
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className="mt-1 flex items-center gap-1.5">
+        <span className={`h-2 w-2 rounded-full ${ok === true ? "bg-emerald-400" : ok === false ? "bg-rose-400" : "bg-muted-foreground/40"}`} />
+        <span className="text-sm font-medium">{ok === true ? "Online" : ok === false ? "Offline" : "—"}</span>
+      </div>
+    </div>
   );
 }

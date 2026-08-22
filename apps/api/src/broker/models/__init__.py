@@ -10,8 +10,10 @@ from broker.models.order import OrderPreview
 from broker.models.paper_trade import PaperTrade
 from broker.models.risk import AgentControl, RiskEvaluationRecord, RiskPolicy
 from broker.models.performance_review import PerformanceReview
+from broker.models.tracked_ticker import TrackedTicker
 
 __all__ = [
+    "TrackedTicker",
     "StockUniverse",
     "PriceBar",
     "ScanRun",

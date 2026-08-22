@@ -7,11 +7,8 @@ import { cn } from "@/lib/utils";
 const LINKS = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/ideas", label: "Top Ideas" },
-  { href: "/orders", label: "Orders" },
-  { href: "/paper-trades", label: "Positions" },
-  { href: "/portfolio", label: "Portfolio" },
-  { href: "/reports", label: "Reports" },
-  { href: "/agent-control", label: "Agent Control" },
+  { href: "/my-trades", label: "My Trades" },
+  { href: "/analysis", label: "AI Analysis" },
   { href: "/help", label: "Help" },
 ];
 

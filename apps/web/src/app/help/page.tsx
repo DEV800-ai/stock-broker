@@ -18,14 +18,17 @@ export default function HelpPage() {
           <p>
             Stock Broker scans the market for tickers with notable technical signals, ranks the
             strongest ones on <strong className="text-foreground">Top Ideas</strong>, and can
-            generate an AI-written research thesis for any of them. From there you can prepare an
-            order preview and track it through to a paper trade.
+            generate an AI-written research report for any ticker on{" "}
+            <strong className="text-foreground">AI Analysis</strong>. Use{" "}
+            <strong className="text-foreground">My Trades</strong> to keep a personal list of
+            tickers you're following.
           </p>
           <p>
             <strong className="text-foreground">
               This app never places a live trade for you and never tells you to buy or sell.
             </strong>{" "}
-            It only prepares research and an order preview. You review it and decide.
+            It only prepares research. Trading — paper or manual — happens through the workflow
+            described below, and always requires a human decision.
           </p>
         </CardContent>
       </Card>
@@ -38,9 +41,9 @@ export default function HelpPage() {
           <ol className="list-decimal space-y-3 pl-4 text-sm text-muted-foreground">
             <li>
               <strong className="text-foreground">Run a scan.</strong> Click{" "}
-              <em>Run Scan</em> on <strong className="text-foreground">Top Ideas</strong> or the{" "}
-              <strong className="text-foreground">Dashboard</strong>. It takes a few minutes to
-              score the full ticker universe.
+              <em>Run New Scan</em> on the <strong className="text-foreground">Dashboard</strong>{" "}
+              or <em>Run Scan</em> on <strong className="text-foreground">Top Ideas</strong>. It
+              takes a few minutes to score the full ticker universe.
             </li>
             <li>
               <strong className="text-foreground">Review Top Ideas.</strong> Click a card to open
@@ -52,25 +55,20 @@ export default function HelpPage() {
               the risks are — description only, never a recommendation.
             </li>
             <li>
-              <strong className="text-foreground">Set a status.</strong> Mark a ticker Watching,
-              Researching, Paper Trading, or Avoided to track where it stands.
+              <strong className="text-foreground">Track tickers you care about.</strong> Add any
+              symbol to <strong className="text-foreground">My Trades</strong> to keep a personal
+              watchlist with notes, enriched with the latest price and score when available.
             </li>
             <li>
-              <strong className="text-foreground">Prepare an order preview.</strong> From a
-              ticker's detail panel, fill in shares/price and submit — this does not execute
-              anything, it queues a preview for review on{" "}
-              <strong className="text-foreground">Orders</strong>.
+              <strong className="text-foreground">Get an on-demand report.</strong> On{" "}
+              <strong className="text-foreground">AI Analysis</strong>, type any ticker symbol —
+              even one outside the scanned universe — to get the same kind of research report,
+              generated on request.
             </li>
             <li>
-              <strong className="text-foreground">Approve or reject.</strong> On{" "}
-              <strong className="text-foreground">Orders</strong>, a human reviews the preview
-              and its risk evaluation, then approves or rejects it. Nothing moves without this
-              step.
-            </li>
-            <li>
-              <strong className="text-foreground">Track it.</strong> Approved trades show up on{" "}
-              <strong className="text-foreground">Positions</strong> as simulated paper trades —
-              no real money is involved.
+              <strong className="text-foreground">Trade manually, if you choose.</strong> Any
+              actual trade happens outside this app (e.g. in TradingView); you self-report the
+              outcome so it's reflected in your paper-trading history.
             </li>
           </ol>
         </CardContent>
@@ -83,7 +81,7 @@ export default function HelpPage() {
         <CardContent>
           <ul className="list-disc space-y-1 pl-4 text-sm text-muted-foreground">
             <li>It does not place trades. Trades are either simulated (paper) or executed manually by you elsewhere (e.g. TradingView) and self-reported back.</li>
-            <li>It does not tell you to buy or sell — theses describe conditions, not actions.</li>
+            <li>It does not tell you to buy or sell — reports describe conditions, not actions.</li>
             <li>It does not log in to TradingView or any broker on your behalf.</li>
             <li>It does not move a paper trade to open without a human clicking Approve.</li>
             <li>It does not file taxes or calculate tax liability.</li>
@@ -99,7 +97,27 @@ export default function HelpPage() {
           <p>
             Each ticker gets a composite score (0–100%) blending volume surge, momentum, relative
             strength vs. its sector, and gap size. A score of 30%+ puts it on the watchlist; 50%+
-            makes it eligible for an AI thesis.
+            makes it eligible for an AI thesis during a scan. On{" "}
+            <strong className="text-foreground">AI Analysis</strong> this threshold doesn't apply —
+            any ticker you enter gets a report on request.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-medium">Advanced pages</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>
+            The order-preview/approval workflow, paper-trading positions, portfolio summary,
+            weekly performance reports, and the agent kill switch are still fully available — they're
+            just not in the top navigation anymore. Reach them directly at{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">/orders</code>,{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">/paper-trades</code>,{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">/portfolio</code>,{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">/reports</code>, and{" "}
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">/agent-control</code>.
           </p>
         </CardContent>
       </Card>
@@ -122,6 +140,11 @@ export default function HelpPage() {
             <li>
               <strong className="text-foreground">Top Ideas shows no status badges</strong> — run
               a scan for today; badges are tied to the most recent day a scan completed.
+            </li>
+            <li>
+              <strong className="text-foreground">AI Analysis is taking a while</strong> — reports
+              are generated in the background and polled for; a slow ticker or busy API can take
+              up to a minute.
             </li>
           </ul>
         </CardContent>

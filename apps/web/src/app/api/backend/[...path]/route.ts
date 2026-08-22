@@ -61,6 +61,10 @@ async function proxy(req: NextRequest, path: string[]): Promise<NextResponse> {
     return NextResponse.json({ detail: "Backend unreachable" }, { status: 502 });
   }
 
+  if (res.status === 204) {
+    return new NextResponse(null, { status: 204 });
+  }
+
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,
