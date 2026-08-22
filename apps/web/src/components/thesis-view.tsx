@@ -1,6 +1,5 @@
 import { Badge } from "@/components/ui/badge";
 import type { badgeVariants } from "@/components/ui/badge";
-import { DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { StockThesis } from "@/types";
 import type { VariantProps } from "class-variance-authority";
 
@@ -15,9 +14,9 @@ const CONFIDENCE_VARIANTS: Record<string, BadgeVariant> = {
 export function ThesisView({ thesis }: { thesis: StockThesis }) {
   return (
     <>
-      <DialogHeader>
+      <div className="flex flex-col gap-2">
         <div className="flex items-center gap-3">
-          <DialogTitle className="font-mono text-lg">{thesis.ticker}</DialogTitle>
+          <h2 className="font-mono text-lg font-medium leading-none">{thesis.ticker}</h2>
           {thesis.confidence && (
             <Badge variant={CONFIDENCE_VARIANTS[thesis.confidence] ?? "outline"}>
               {thesis.confidence.toUpperCase()} CONFIDENCE
@@ -27,7 +26,7 @@ export function ThesisView({ thesis }: { thesis: StockThesis }) {
         <p className="font-mono text-xs text-muted-foreground">
           Generated {new Date(thesis.generated_at).toLocaleString()} · {thesis.model}
         </p>
-      </DialogHeader>
+      </div>
 
       <div className="space-y-4 mt-4">
         <Section title="Why Interesting" content={thesis.why_interesting} />
