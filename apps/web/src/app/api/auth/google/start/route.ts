@@ -13,7 +13,11 @@ export async function GET(req: NextRequest) {
   }
 
   const state = randomBytes(16).toString("hex");
-  const redirectUri = new URL("/api/auth/google/callback", req.nextUrl.origin).toString();
+  const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const origin = forwardedProto
+    ? `${forwardedProto}://${req.headers.get("x-forwarded-host") ?? req.nextUrl.host}`
+    : req.nextUrl.origin;
+  const redirectUri = new URL("/api/auth/google/callback", origin).toString();
 
   const authUrl = new URL(GOOGLE_AUTH_URL);
   authUrl.searchParams.set("client_id", clientId);

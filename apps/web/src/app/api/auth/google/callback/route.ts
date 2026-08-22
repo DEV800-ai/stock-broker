@@ -38,16 +38,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ detail: "Server is misconfigured: ALLOWED_EMAILS is not set" }, { status: 500 });
   }
 
+  const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const origin = forwardedProto
+    ? `${forwardedProto}://${req.headers.get("x-forwarded-host") ?? req.nextUrl.host}`
+    : req.nextUrl.origin;
+
   const { searchParams } = req.nextUrl;
   const code = searchParams.get("code");
   const state = searchParams.get("state");
   const expectedState = req.cookies.get(STATE_COOKIE)?.value;
 
   if (!code || !state || !expectedState || state !== expectedState) {
-    return loginError(req.nextUrl.origin, "Login failed: invalid or expired state");
+    return loginError(origin, "Login failed: invalid or expired state");
   }
 
-  const redirectUri = new URL("/api/auth/google/callback", req.nextUrl.origin).toString();
+  const redirectUri = new URL("/api/auth/google/callback", origin).toString();
 
   const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
@@ -62,12 +67,12 @@ export async function GET(req: NextRequest) {
   });
 
   if (!tokenRes.ok) {
-    return loginError(req.nextUrl.origin, "Login failed: could not exchange code");
+    return loginError(origin, "Login failed: could not exchange code");
   }
 
   const tokenBody = (await tokenRes.json()) as { id_token?: string };
   if (!tokenBody.id_token) {
-    return loginError(req.nextUrl.origin, "Login failed: no ID token returned");
+    return loginError(origin, "Login failed: no ID token returned");
   }
 
   let email: string | undefined;
@@ -82,19 +87,19 @@ export async function GET(req: NextRequest) {
     name = typeof payload.name === "string" ? payload.name : undefined;
     emailVerified = payload.email_verified === true;
   } catch {
-    return loginError(req.nextUrl.origin, "Login failed: invalid ID token");
+    return loginError(origin, "Login failed: invalid ID token");
   }
 
   if (!email || !emailVerified) {
-    return loginError(req.nextUrl.origin, "Login failed: email not verified");
+    return loginError(origin, "Login failed: email not verified");
   }
   if (!allowed.has(email.toLowerCase())) {
-    return loginError(req.nextUrl.origin, "This Google account is not authorized for this app");
+    return loginError(origin, "This Google account is not authorized for this app");
   }
 
   await createSession({ email, name: name ?? null });
 
-  const res = NextResponse.redirect(new URL("/", req.nextUrl.origin));
+  const res = NextResponse.redirect(new URL("/", origin));
   res.cookies.delete(STATE_COOKIE);
   return res;
 }
