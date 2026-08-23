@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import type { badgeVariants } from "@/components/ui/badge";
 import type { VariantProps } from "class-variance-authority";
@@ -261,9 +260,6 @@ export default function IdeasPage() {
                 {created ? (
                   <div className="space-y-2">
                     <p className="text-sm text-emerald-400">Order preview created.</p>
-                    <Link href="/orders" className="text-sm text-primary underline underline-offset-4">
-                      View in Order Queue →
-                    </Link>
                   </div>
                 ) : form && (
                   <div className="space-y-3">
