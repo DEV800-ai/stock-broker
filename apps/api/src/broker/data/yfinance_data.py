@@ -1,10 +1,30 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 
 import pandas as pd
 import yfinance as yf
 
 logger = logging.getLogger(__name__)
+
+_DOWNLOAD_TIMEOUT = 30
+
+
+def _download_with_deadline(*args, **kwargs):
+    """Run yf.download with a hard wall-clock deadline.
+
+    yfinance's own `timeout` kwarg only bounds individual HTTP requests, not
+    internal retry/crumb-handshake loops against Yahoo — a call can still hang
+    indefinitely despite passing timeout=N. Running it in a worker thread and
+    abandoning it (shutdown(wait=False)) on deadline lets the caller move on
+    even though the underlying thread can't be forcibly killed.
+    """
+    pool = ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(yf.download, *args, **kwargs)
+    try:
+        return future.result(timeout=_DOWNLOAD_TIMEOUT)
+    finally:
+        pool.shutdown(wait=False)
 
 
 def get_bars(ticker: str, days: int = 200) -> pd.DataFrame:
@@ -16,9 +36,9 @@ def get_bars(ticker: str, days: int = 200) -> pd.DataFrame:
     """
     try:
         start = date.today() - timedelta(days=days + 10)  # buffer for weekends/holidays
-        df = yf.download(
+        df = _download_with_deadline(
             ticker, start=start.isoformat(), auto_adjust=True, progress=False,
-            multi_level_column=False, timeout=30,
+            multi_level_column=False, timeout=_DOWNLOAD_TIMEOUT,
         )
         if df.empty:
             return pd.DataFrame()
@@ -75,13 +95,13 @@ def get_bars_bulk(tickers: list[str], days: int = 200) -> dict[str, pd.DataFrame
         return {}
     try:
         start = date.today() - timedelta(days=days + 10)
-        raw = yf.download(
+        raw = _download_with_deadline(
             tickers,
             start=start.isoformat(),
             auto_adjust=True,
             progress=False,
             group_by="ticker",
-            timeout=30,
+            timeout=_DOWNLOAD_TIMEOUT,
         )
         result: dict[str, pd.DataFrame] = {}
         if len(tickers) == 1:
