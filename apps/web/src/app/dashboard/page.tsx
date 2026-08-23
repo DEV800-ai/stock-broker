@@ -208,8 +208,8 @@ function ScanProgressBar({ run }: { run: ScanRun }) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{PHASE_LABELS[phase] ?? phase}</span>
-        <span className="font-mono">{processed}/{total_tickers} · {pct.toFixed(0)}%</span>
+        <span>{PHASE_LABELS[phase] ?? phase} (phase {phaseIndex + 1}/2)</span>
+        <span className="font-mono">{processed}/{total_tickers} · {pct.toFixed(0)}% overall</span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
         <div

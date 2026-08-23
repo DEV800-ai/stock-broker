@@ -16,7 +16,10 @@ def get_bars(ticker: str, days: int = 200) -> pd.DataFrame:
     """
     try:
         start = date.today() - timedelta(days=days + 10)  # buffer for weekends/holidays
-        df = yf.download(ticker, start=start.isoformat(), auto_adjust=True, progress=False, multi_level_column=False)
+        df = yf.download(
+            ticker, start=start.isoformat(), auto_adjust=True, progress=False,
+            multi_level_column=False, timeout=30,
+        )
         if df.empty:
             return pd.DataFrame()
         df = df.reset_index()
@@ -78,6 +81,7 @@ def get_bars_bulk(tickers: list[str], days: int = 200) -> dict[str, pd.DataFrame
             auto_adjust=True,
             progress=False,
             group_by="ticker",
+            timeout=30,
         )
         result: dict[str, pd.DataFrame] = {}
         if len(tickers) == 1:
