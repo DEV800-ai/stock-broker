@@ -677,3 +677,146 @@ Recommended order: A → C (can start in parallel with B) → B → D → F → 
 3. Add `broker/base.py` `BrokerAdapter` ABC and refactor `data/ibkr.py` usage behind `broker/ibkr_adapter.py` + a `broker/paper_adapter.py`, so paper and (future) live share one interface.
 4. Add `order_previews`/`live_orders`/`agent_control` tables + `POST /orders/preview` endpoint, feeding the risk engine — before any UI, verify end-to-end via API/tests that a preview correctly resolves to each of the five verdicts.
 5. Build the Trade Approval Queue dashboard view against the paper adapter only, to validate the full UX before touching live IBKR order placement.
+
+---
+
+## 17. Experimental Signal: Elliott Wave Pattern Recognition
+
+**Status:** Proposed, not scheduled. Explicitly gated behind Phase 4 of the
+`CLAUDE.md` roadmap — added only after the scanner/watchlist, AI thesis
+layer, and paper trading with risk controls are complete and stable. This
+section exists so the design is captured now, not so it gets built next.
+
+### 17.1 Why, and why low-weighted
+
+Elliott Wave counts are subjective and revisable — a count that looks like
+"Wave 3 beginning" can be relabeled after a few more bars invalidate it.
+That makes it fundamentally different from the existing sub-scores in
+`ranking/scorer.py` (RSI, MACD, Bollinger %B, relative strength), which are
+deterministic functions of price/volume with no interpretive step. Elliott
+Wave should never be allowed to independently drive a ticker's
+`composite_score` or gate thesis generation on its own. It's an additional,
+optional sub-score, initially weighted at **5%** of composite — low enough
+that a wrong or noisy wave count can't meaningfully move a ticker's
+ranking, high enough that a strong, confirmed count has some visible effect.
+The 90-day backtest (§17.4) is what's allowed to move that weight — up or
+to zero — not intuition.
+
+### 17.2 Signal generation
+
+Extends `ranking/scorer.py` with a new sub-score function, following the
+existing pattern (`_rsi`, `_macd`, `_bollinger_bands` → `_volume_score`,
+`_momentum_score`, etc.):
+
+```python
+# ranking/elliott_wave.py (shape, not final code)
+
+class WaveCount(BaseModel):
+    label: str                      # "wave_3_beginning" | "abc_correction_complete" | ...
+    confidence: float               # 0.0-1.0, model/heuristic-derived
+    wave2_retrace_pct: float | None # e.g. 0.58 — how much of wave 1 was retraced
+    fib_alignment: bool             # does the count line up with a standard fib level (38.2/50/61.8%)?
+    invalidation_price: float       # price below/above which this count is void
+    momentum_confirms: bool         # RSI/MACD agree with wave direction
+    volume_confirms: bool           # volume pattern consistent with the wave (e.g. rising into wave 3)
+
+def detect_wave_setups(bars: pd.DataFrame) -> list[WaveCount]: ...
+
+def _elliott_wave_score(counts: list[WaveCount]) -> float | None:
+    """Only counts with momentum_confirms AND volume_confirms contribute.
+    An unconfirmed count contributes 0, regardless of its own confidence —
+    confirmation is a gate, not an additive factor."""
+```
+
+Wave-count generation itself (pivot/zigzag detection → wave-degree labeling
+→ Fibonacci ratio matching) is the hard, ambiguous part of this feature and
+needs its own design pass before implementation — this doc intentionally
+doesn't pin down zigzag-threshold or labeling-algorithm choices yet.
+Whatever approach is chosen, **a count must be locked at signal-time and
+never mutated retroactively** — if the same wave later gets relabeled, that
+relabeling is a new signal row, not an edit to the old one. This matters for
+§17.4: relabeling history to make a signal look better in hindsight would
+invalidate the backtest.
+
+### 17.3 Storage — extends Postgres, no separate DB
+
+Per `CLAUDE.md` ("PostgreSQL only (not DuckDB) — the API and background
+scanner write concurrently, single-writer DBs won't work here"), historical
+wave signals live in a new Postgres table alongside `scan_results`, not in
+a separate DuckDB file:
+
+```sql
+CREATE TABLE wave_signals (
+    id                   SERIAL PRIMARY KEY,
+    ticker               VARCHAR(12) NOT NULL,
+    scan_result_id       INTEGER REFERENCES scan_results(id),
+    signal_date          DATE NOT NULL,
+    label                VARCHAR(50) NOT NULL,           -- wave_3_beginning, abc_correction_complete, ...
+    confidence           DOUBLE PRECISION NOT NULL,
+    wave2_retrace_pct    DOUBLE PRECISION,
+    fib_alignment        BOOLEAN,
+    invalidation_price   DOUBLE PRECISION NOT NULL,
+    momentum_confirms    BOOLEAN NOT NULL,
+    volume_confirms      BOOLEAN NOT NULL,
+    price_at_signal      DOUBLE PRECISION NOT NULL,
+    return_30d           DOUBLE PRECISION,                -- backfilled 30 calendar days later
+    return_90d           DOUBLE PRECISION,                -- backfilled 90 calendar days later
+    spx_return_30d       DOUBLE PRECISION,                -- S&P 500 return over the same window
+    spx_return_90d       DOUBLE PRECISION,
+    invalidated_at       DATE,                            -- set if price crossed invalidation_price before window end
+    created_at           TIMESTAMP DEFAULT now()
+);
+CREATE INDEX ON wave_signals (ticker, signal_date);
+CREATE INDEX ON wave_signals (label);
+```
+
+Rows are append-only (matches the `agent_runs`/`audit_log` convention in
+§5.2) — `return_30d`/`return_90d`/`invalidated_at` are the only fields
+backfilled after the fact, by a scheduled job, never by re-running wave
+detection on historical bars.
+
+### 17.4 Backtest & rejection criteria
+
+A nightly/weekly job computes, per `label`:
+
+| Metric | Reject if |
+|---|---|
+| Sample size (signal count) | < 30 (not enough to trust hit-rate/Sharpe estimates) |
+| Hit rate (return_30d or return_90d > 0) | Not statistically distinguishable from 50% at the sample size available |
+| Alpha vs. S&P 500 (`return_Nd - spx_return_Nd`) | Mean alpha ≤ 0, or not statistically significant (e.g. t-test / bootstrap CI includes 0) |
+| Sharpe (of the alpha series) | Below a minimum threshold (e.g. 0.5) — TBD during implementation |
+
+A `label` that fails any of these is excluded from the composite score
+(contributes 0 weight) but keeps accumulating signals/backtest data — it
+can requalify later if the sample grows and results improve. This mirrors
+`thesis_min_score` in spirit: a threshold gate, config-driven, not a
+one-time decision baked into code.
+
+### 17.5 Display
+
+Research-only, surfaced on the Stock Detail page alongside the existing
+thesis, never as a standalone alert or approval-queue trigger:
+
+```
+Possible Wave 3 setup — 68% confidence
+Wave 2 retraced 58% of Wave 1
+Volume and momentum confirmation: positive
+Invalidation: price below $42.10
+Backtest (label="wave_3_beginning", n=142): 30d hit rate 61%, alpha vs SPX +2.1% (95% CI [0.4%, 3.8%])
+```
+
+The backtest line is not optional in the display — a wave setup shown
+without its own track record invites the same "confident-sounding but
+unvalidated" failure mode the thesis agent already guards against via
+`thesis_min_score` and citation requirements (§13).
+
+### 17.6 Sequencing
+
+Not a milestone in §10 — it sits after Milestone F, gated on Phase 3
+(paper trading + risk controls) being complete per the `CLAUDE.md` roadmap:
+
+1. Finish scanner + watchlist, AI thesis layer, paper trading + risk controls (existing Phases 1–3 / Milestones A–F).
+2. Build wave detection (§17.2) and let it run read-only, writing to `wave_signals` with zero composite-score weight, purely to accumulate backtest sample size.
+3. Once `label`-level sample size clears the §17.4 gate, enable it in the composite score at 5% weight.
+4. Let the backtest job (§17.4) continue running against live data; adjust weight (including to zero) based on results — this is a config change (`config.py`), not a code change.
+5. Human-approved execution influenced by Elliott Wave, if ever, only after sustained validated results — no different from any other signal in the composite, and still subject to every existing rule in this doc (no directive language, no auto-execution, human approval required).
