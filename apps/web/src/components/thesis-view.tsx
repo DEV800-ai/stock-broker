@@ -32,6 +32,7 @@ export function ThesisView({ thesis }: { thesis: StockThesis }) {
         <Section title="Why Interesting" content={thesis.why_interesting} />
         <Section title="Risk Factors" content={thesis.risk_factors} />
         {thesis.sector_context && <Section title="Sector Context" content={thesis.sector_context} />}
+        {thesis.elliott_wave_context && <Section title="Elliott Wave Context" content={thesis.elliott_wave_context} />}
         {thesis.news_summary && <Section title="News Summary" content={thesis.news_summary} />}
         {thesis.catalysts && <Section title="Catalysts" content={thesis.catalysts} />}
         {thesis.peer_comparison && <Section title="Peer Comparison" content={thesis.peer_comparison} />}

@@ -20,6 +20,7 @@ class StockThesis(Base):
     risk_factors: Mapped[str] = mapped_column(Text, nullable=False)
     sector_context: Mapped[str | None] = mapped_column(Text)
     peer_comparison: Mapped[str | None] = mapped_column(Text)
+    elliott_wave_context: Mapped[str | None] = mapped_column(Text)
     news_summary: Mapped[str | None] = mapped_column(Text)
     catalysts: Mapped[str | None] = mapped_column(Text)
     confidence: Mapped[str | None] = mapped_column(String(20))  # high|medium|low

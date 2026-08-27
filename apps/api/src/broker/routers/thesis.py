@@ -22,6 +22,7 @@ class ThesisOut(BaseModel):
     risk_factors: str
     sector_context: str | None
     peer_comparison: str | None
+    elliott_wave_context: str | None
     news_summary: str | None
     catalysts: str | None
     confidence: str | None

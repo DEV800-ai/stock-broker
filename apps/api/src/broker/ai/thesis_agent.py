@@ -24,6 +24,7 @@ class ThesisResponse(BaseModel):
     why_interesting: str
     risk_factors: str
     sector_context: str | None = None
+    elliott_wave_context: str | None = None
     news_summary: str | None = None
     catalysts: str | None = None
     confidence: str | None = None
@@ -62,6 +63,7 @@ Respond ONLY with valid JSON matching this schema (no markdown, no preamble):
   "why_interesting": "<2-4 sentences describing what the signals indicate>",
   "risk_factors": "<2-3 sentences on key technical or macro risks>",
   "sector_context": "<1-2 sentences on sector-level context if relevant, or null>",
+  "elliott_wave_context": "<1-3 sentences describing any plausible Elliott Wave structure from the available daily technical data, including invalidation or uncertainty; use null if no defensible read exists>",
   "news_summary": "<1-3 sentences summarising the most relevant recent news, or null if none>",
   "catalysts": "<1-2 sentences on potential near-term catalysts to watch, or null>",
   "confidence": "high" | "medium" | "low"
@@ -72,7 +74,7 @@ Respond ONLY with valid JSON matching this schema (no markdown, no preamble):
 # Bump when _SYSTEM_PROMPT or _build_user_prompt changes in a way that could
 # change the model's output for the same ticker/date/signals — forces cached
 # theses to regenerate instead of silently returning stale reasoning.
-_PROMPT_VERSION = 2
+_PROMPT_VERSION = 3
 
 
 def _input_hash(ticker: str, scan_date: str, signals: dict | None) -> str:
@@ -310,6 +312,7 @@ class ThesisAgent:
             why_interesting=parsed.why_interesting,
             risk_factors=parsed.risk_factors,
             sector_context=parsed.sector_context,
+            elliott_wave_context=parsed.elliott_wave_context,
             news_summary=parsed.news_summary,
             catalysts=parsed.catalysts,
             confidence=parsed.confidence,
