@@ -28,28 +28,6 @@ const STATUS_LABEL: Record<WatchlistStatus, string> = {
   avoid: "Avoided",
 };
 
-interface CreateForm {
-  action: "BUY" | "SELL";
-  reason: string;
-  shares: string;
-  limit_price: string;
-  order_type: string;
-  time_in_force: string;
-  execution_mode: "paper" | "manual_tradingview";
-}
-
-function emptyForm(scan: ScanResult): CreateForm {
-  return {
-    action: "BUY",
-    reason: "",
-    shares: "1",
-    limit_price: scan.price != null ? scan.price.toFixed(2) : "",
-    order_type: "LIMIT",
-    time_in_force: "DAY",
-    execution_mode: "paper",
-  };
-}
-
 export default function IdeasPage() {
   const [results, setResults] = useState<ScanResult[]>([]);
   const [statuses, setStatuses] = useState<Record<string, WatchlistStatus>>({});
@@ -61,11 +39,6 @@ export default function IdeasPage() {
   const [generating, setGenerating] = useState(false);
   const [thesisError, setThesisError] = useState<string | null>(null);
   const [statusSaving, setStatusSaving] = useState(false);
-
-  const [form, setForm] = useState<CreateForm | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [created, setCreated] = useState(false);
 
   function loadTop() {
     api.scanResults({ limit: TOP_N }).then(setResults).catch(console.error);
@@ -125,9 +98,6 @@ export default function IdeasPage() {
     setActive(scan);
     setThesis(null);
     setThesisError(null);
-    setForm(emptyForm(scan));
-    setCreateError(null);
-    setCreated(false);
     setLoadingThesis(true);
     try {
       const t = await api.thesis(scan.ticker);
@@ -159,30 +129,6 @@ export default function IdeasPage() {
     } catch (err) {
       setGenerating(false);
       setThesisError(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  async function submitCreate() {
-    if (!active || !form) return;
-    setSubmitting(true);
-    setCreateError(null);
-    try {
-      await api.createOrderPreview({
-        ticker: active.ticker,
-        action: form.action,
-        reason: form.reason || `Scanner flagged ${active.ticker} — composite score ${((active.composite_score ?? 0) * 100).toFixed(0)}%`,
-        thesis_id: thesis?.id,
-        shares: form.shares ? parseInt(form.shares) : undefined,
-        limit_price: form.limit_price ? parseFloat(form.limit_price) : undefined,
-        order_type: form.order_type,
-        time_in_force: form.time_in_force,
-        execution_mode: form.execution_mode,
-      });
-      setCreated(true);
-    } catch (err) {
-      setCreateError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSubmitting(false);
     }
   }
 
@@ -255,68 +201,10 @@ export default function IdeasPage() {
                 )}
               </div>
 
-              <div>
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">New Order Preview</h2>
-                {created ? (
-                  <div className="space-y-2">
-                    <p className="text-sm text-emerald-400">Order preview created.</p>
-                  </div>
-                ) : form && (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <Field label="Action" required>
-                        <select className={inputCls} value={form.action}
-                          onChange={(e) => setForm((f) => f && ({ ...f, action: e.target.value as CreateForm["action"] }))}>
-                          <option value="BUY">BUY</option>
-                          <option value="SELL">SELL</option>
-                        </select>
-                      </Field>
-                      <Field label="Shares">
-                        <input type="number" min="1" className={inputCls} value={form.shares}
-                          onChange={(e) => setForm((f) => f && ({ ...f, shares: e.target.value }))} />
-                      </Field>
-                    </div>
-                    <Field label="Reason" required>
-                      <textarea rows={2} className={inputCls}
-                        placeholder={`Scanner flagged ${active.ticker} — composite score ${((active.composite_score ?? 0) * 100).toFixed(0)}%`}
-                        value={form.reason}
-                        onChange={(e) => setForm((f) => f && ({ ...f, reason: e.target.value }))} />
-                    </Field>
-                    <div className="grid grid-cols-2 gap-3">
-                      <Field label="Limit price ($)">
-                        <input type="number" step="0.01" className={inputCls} value={form.limit_price}
-                          onChange={(e) => setForm((f) => f && ({ ...f, limit_price: e.target.value }))} />
-                      </Field>
-                      <Field label="Execution mode" required>
-                        <select className={inputCls} value={form.execution_mode}
-                          onChange={(e) => setForm((f) => f && ({ ...f, execution_mode: e.target.value as CreateForm["execution_mode"] }))}>
-                          <option value="paper">Paper</option>
-                          <option value="manual_tradingview">Manual via TradingView</option>
-                        </select>
-                      </Field>
-                    </div>
-                    {createError && <ErrorAlert message={createError} />}
-                    <Button className="w-full" disabled={submitting} onClick={submitCreate}>
-                      {submitting ? "Submitting…" : "Create Preview"}
-                    </Button>
-                  </div>
-                )}
-              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-const inputCls = "w-full rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
-
-function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
-  return (
-    <div className="space-y-1">
-      <label className="text-xs font-medium text-muted-foreground">{label}{required && " *"}</label>
-      {children}
     </div>
   );
 }

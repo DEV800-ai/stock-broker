@@ -87,6 +87,18 @@ export interface StockThesis {
   news_score: number | null;
 }
 
+export interface ThesisTranslation {
+  thesis_id: number;
+  language: "he";
+  why_interesting: string;
+  risk_factors: string;
+  sector_context: string | null;
+  peer_comparison: string | null;
+  elliott_wave_context: string | null;
+  news_summary: string | null;
+  catalysts: string | null;
+}
+
 export interface TrackedTicker {
   id: number;
   ticker: string;

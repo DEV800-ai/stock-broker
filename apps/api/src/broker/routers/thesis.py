@@ -50,6 +50,18 @@ class ThesisCheckOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ThesisTranslationOut(BaseModel):
+    thesis_id: int
+    language: str
+    why_interesting: str
+    risk_factors: str
+    sector_context: str | None
+    peer_comparison: str | None
+    elliott_wave_context: str | None
+    news_summary: str | None
+    catalysts: str | None
+
+
 @router.get("/thesis/{ticker}", response_model=ThesisOut)
 def get_latest_thesis(ticker: str, db: Session = Depends(get_db)) -> StockThesis:
     thesis = db.scalars(
@@ -60,6 +72,19 @@ def get_latest_thesis(ticker: str, db: Session = Depends(get_db)) -> StockThesis
     if not thesis:
         raise HTTPException(status_code=404, detail=f"No thesis found for {ticker}")
     return thesis
+
+
+@router.get("/theses/{thesis_id}/hebrew", response_model=ThesisTranslationOut)
+def get_hebrew_thesis(thesis_id: int, db: Session = Depends(get_db)) -> dict:
+    from broker.ai.thesis_translation import ThesisTranslationError, translate_thesis_to_hebrew
+
+    thesis = db.get(StockThesis, thesis_id)
+    if not thesis:
+        raise HTTPException(status_code=404, detail="Thesis not found")
+    try:
+        return translate_thesis_to_hebrew(db, thesis).model_dump()
+    except ThesisTranslationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.get("/thesis/{ticker}/history", response_model=list[ThesisOut])

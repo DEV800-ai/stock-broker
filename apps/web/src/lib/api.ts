@@ -12,6 +12,7 @@ import type {
   ScanResult,
   ScanRun,
   StockThesis,
+  ThesisTranslation,
   TrackedTicker,
   UniverseStats,
   WatchlistEntry,
@@ -77,6 +78,8 @@ export const api = {
     }),
 
   thesis: (ticker: string) => apiFetch<StockThesis>(`/api/v1/thesis/${ticker}`),
+
+  thesisHebrew: (thesisId: number) => apiFetch<ThesisTranslation>(`/api/v1/theses/${thesisId}/hebrew`),
 
   generateThesis: (ticker: string, scanResultId?: number) =>
     apiFetch<{ message: string }>("/api/v1/thesis/generate", {
