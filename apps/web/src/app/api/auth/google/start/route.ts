@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
+import { requestOrigin } from "@/lib/request-origin";
 
 export const dynamic = "force-dynamic";
 
@@ -13,10 +14,7 @@ export async function GET(req: NextRequest) {
   }
 
   const state = randomBytes(16).toString("hex");
-  const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
-  const origin = forwardedProto
-    ? `${forwardedProto}://${req.headers.get("x-forwarded-host") ?? req.nextUrl.host}`
-    : req.nextUrl.origin;
+  const origin = requestOrigin(req.headers, req.nextUrl.origin);
   const redirectUri = new URL("/api/auth/google/callback", origin).toString();
 
   const authUrl = new URL(GOOGLE_AUTH_URL);

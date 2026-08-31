@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { requestOrigin } from "@/lib/request-origin";
 import { createSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -35,10 +36,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ detail: "Server is misconfigured: ALLOWED_EMAILS is not set; use comma-separated emails or *" }, { status: 500 });
   }
 
-  const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
-  const origin = forwardedProto
-    ? `${forwardedProto}://${req.headers.get("x-forwarded-host") ?? req.nextUrl.host}`
-    : req.nextUrl.origin;
+  const origin = requestOrigin(req.headers, req.nextUrl.origin);
 
   const { searchParams } = req.nextUrl;
   const code = searchParams.get("code");

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { requestOrigin } from "@/lib/request-origin";
 
 // Page-level guard: redirects unauthenticated browser navigation to /login. This is an
 // optimistic check (reads the session cookie only, no DB) — the real enforcement point is
@@ -26,7 +27,7 @@ export default async function proxy(req: NextRequest) {
   if (PUBLIC_PATHS.includes(pathname)) return NextResponse.next();
 
   if (!(await hasValidSession(req))) {
-    return NextResponse.redirect(new URL("/login", req.nextUrl.origin));
+    return NextResponse.redirect(new URL("/login", requestOrigin(req.headers, req.nextUrl.origin)));
   }
   return NextResponse.next();
 }
