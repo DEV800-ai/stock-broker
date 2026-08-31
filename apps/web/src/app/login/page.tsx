@@ -15,7 +15,7 @@ export default async function LoginPage({
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Sign in with the Google account this deployment is configured for.
+            Sign in with Google to access this deployment.
           </p>
           {error && (
             <p className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">

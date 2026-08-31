@@ -11,13 +11,10 @@ const GOOGLE_ISSUER = ["https://accounts.google.com", "accounts.google.com"];
 
 const jwks = createRemoteJWKSet(new URL(GOOGLE_JWKS_URL));
 
-function allowedEmails(): Set<string> {
-  return new Set(
-    (process.env.ALLOWED_EMAILS ?? "")
-      .split(",")
-      .map((e) => e.trim().toLowerCase())
-      .filter(Boolean)
-  );
+function allowedEmails(): Set<string> | "any" {
+  const raw = (process.env.ALLOWED_EMAILS ?? "").trim();
+  if (raw === "*") return "any";
+  return new Set(raw.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
 }
 
 function loginError(origin: string, message: string) {
@@ -34,8 +31,8 @@ export async function GET(req: NextRequest) {
   }
 
   const allowed = allowedEmails();
-  if (allowed.size === 0) {
-    return NextResponse.json({ detail: "Server is misconfigured: ALLOWED_EMAILS is not set" }, { status: 500 });
+  if (allowed !== "any" && allowed.size === 0) {
+    return NextResponse.json({ detail: "Server is misconfigured: ALLOWED_EMAILS is not set; use comma-separated emails or *" }, { status: 500 });
   }
 
   const forwardedProto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
@@ -93,7 +90,7 @@ export async function GET(req: NextRequest) {
   if (!email || !emailVerified) {
     return loginError(origin, "Login failed: email not verified");
   }
-  if (!allowed.has(email.toLowerCase())) {
+  if (allowed !== "any" && !allowed.has(email.toLowerCase())) {
     return loginError(origin, "This Google account is not authorized for this app");
   }
 
