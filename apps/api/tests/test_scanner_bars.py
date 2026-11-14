@@ -66,3 +66,40 @@ def test_old_calendar_day_window_was_too_short_for_sma200():
     today = date(2026, 11, 13)
     old_start = today - timedelta(days=220 + 10)
     assert np.busday_count(old_start, today) < 200
+
+
+# --- pre-score universe filters -----------------------------------------------
+
+import pandas as pd  # noqa: E402
+
+from broker.scanner.runner import universe_filter_reason  # noqa: E402
+
+
+def _bars(closes, volumes) -> pd.DataFrame:
+    return pd.DataFrame({"close": closes, "volume": volumes})
+
+
+def test_filter_passes_liquid_ticker_above_min_price():
+    # $50 x 1M shares = $50M/day
+    assert universe_filter_reason(_bars([50.0] * 30, [1_000_000] * 30), 5.0, 10e6) is None
+
+
+def test_filter_rejects_low_price():
+    assert universe_filter_reason(_bars([4.99] * 30, [50_000_000] * 30), 5.0, 10e6) == "min_price"
+
+
+def test_filter_rejects_low_dollar_volume_not_share_volume():
+    # 1.5M shares/day looks liquid, but at $6 that's only $9M/day.
+    assert universe_filter_reason(_bars([6.0] * 30, [1_500_000] * 30), 5.0, 10e6) == "min_dollar_volume"
+
+
+def test_filter_uses_last_20_bars_for_dollar_volume():
+    closes = [50.0] * 40
+    volumes = [10_000_000] * 20 + [100_000] * 20  # liquid long ago, thin recently
+    assert universe_filter_reason(_bars(closes, volumes), 5.0, 10e6) == "min_dollar_volume"
+    assert universe_filter_reason(_bars(closes, volumes[::-1]), 5.0, 10e6) is None
+
+
+def test_filter_handles_missing_volume_and_empty():
+    assert universe_filter_reason(_bars([50.0] * 20, [None] * 20), 5.0, 10e6) == "min_dollar_volume"
+    assert universe_filter_reason(_bars([], []), 5.0, 10e6) == "no_bars"

@@ -59,6 +59,24 @@ def _latest_vix() -> float | None:
         return None
 
 
+def universe_filter_reason(bars, min_price: float, min_dollar_volume: float) -> str | None:
+    """Why a ticker should be skipped before scoring, or None if it passes.
+
+    bars: ascending DataFrame with close and volume. Price is the latest close;
+    dollar volume is the mean of close x volume over the last 20 bars.
+    """
+    if bars.empty:
+        return "no_bars"
+    price = float(bars["close"].iloc[-1])
+    if price < min_price:
+        return "min_price"
+    recent = bars.tail(20)
+    dollar_volume = float((recent["close"].astype(float) * recent["volume"].fillna(0).astype(float)).mean())
+    if dollar_volume < min_dollar_volume:
+        return "min_dollar_volume"
+    return None
+
+
 class ScanRunner:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -221,6 +239,20 @@ class ScanRunner:
         self.db.commit()
         logger.info("Market regime: %s", regime["regime"])
 
+    def _record_filtered(self, run_id: int, filtered: dict[str, int]) -> None:
+        run = self.db.get(ScanRun, run_id)
+        run.params_json = {
+            **(run.params_json or {}),
+            "universe_filter": {
+                "min_price": settings.min_price,
+                "min_dollar_volume": settings.min_dollar_volume,
+                "filtered_out": sum(filtered.values()),
+                "filtered_by_reason": filtered,
+            },
+        }
+        self.db.commit()
+        logger.info("Universe filter skipped %d tickers: %s", sum(filtered.values()), filtered)
+
     def _score_all(self, tickers: list[str], sector_bars: dict, run_id: int) -> list[ScanResult]:
         scan_date = date.today()
         # build ticker→sector map
@@ -229,11 +261,17 @@ class ScanRunner:
         )
 
         results: list[ScanResult] = []
+        filtered: dict[str, int] = {"min_price": 0, "min_dollar_volume": 0}
         for idx, ticker in enumerate(tickers, start=1):
             bars_df = load_recent_bars(
                 self.db, ticker, ["bar_date", "open", "high", "low", "close", "volume"]
             )
             if bars_df.empty:
+                continue
+
+            reason = universe_filter_reason(bars_df, settings.min_price, settings.min_dollar_volume)
+            if reason is not None:
+                filtered[reason] += 1
                 continue
 
             sector = sector_map.get(ticker)
@@ -259,6 +297,7 @@ class ScanRunner:
 
         self.db.commit()
         self._bump_progress(run_id, len(tickers))
+        self._record_filtered(run_id, filtered)
         # refresh to get IDs
         for r in results:
             self.db.refresh(r)

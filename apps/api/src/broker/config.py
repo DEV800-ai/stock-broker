@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     # confidence to — this app is paper-trading/swing-oriented, not day-trading.
     thesis_target_horizon: str = "1-3 months"
     scanner_universe_size: int = 500
+    # Pre-score universe filters (scanner/runner.py::universe_filter_reason):
+    # skip tickers below min_price or below min 20-day avg dollar volume.
+    min_price: float = 5.0
+    min_dollar_volume: float = 10_000_000.0
     # A scan can legitimately run 60-90+ min for the full universe. Only let
     # delete_scan_run clear a still-"running" run once it's been running
     # longer than this — otherwise it races the background scan task and
