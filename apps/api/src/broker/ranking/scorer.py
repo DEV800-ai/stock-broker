@@ -36,16 +36,34 @@ def weights_version(weights: dict[str, float]) -> str:
     )
 
 
+def _wilder_smooth(values: pd.Series, period: int) -> pd.Series:
+    """Wilder's moving average (TradingView ``ta.rma``): seeded with the simple
+    mean of the first ``period`` values, then avg = (prev * (period-1) + x) / period,
+    i.e. an EMA with alpha = 1/period (``ewm(alpha=1/period, adjust=False)``)."""
+    out = pd.Series(float("nan"), index=values.index, dtype="float64")
+    if len(values) < period:
+        return out
+    seeded = values.copy().astype("float64")
+    seeded.iloc[: period - 1] = float("nan")
+    seeded.iloc[period - 1] = float(values.iloc[:period].mean())
+    smoothed = seeded.iloc[period - 1 :].ewm(alpha=1 / period, adjust=False).mean()
+    out.iloc[period - 1 :] = smoothed.to_numpy()
+    return out
+
+
 def _rsi(closes: pd.Series, period: int = 14) -> float | None:
+    """RSI with Wilder smoothing (matches TradingView / most charting platforms)."""
     if len(closes) < period + 1:
         return None
     delta = closes.diff().dropna()
-    gain = delta.clip(lower=0).rolling(period).mean()
-    loss = (-delta.clip(upper=0)).rolling(period).mean()
-    rs = gain / loss.replace(0, float("nan"))
-    rsi = 100 - (100 / (1 + rs))
-    val = rsi.iloc[-1]
-    return float(val) if not math.isnan(val) else None
+    avg_gain = _wilder_smooth(delta.clip(lower=0), period)
+    avg_loss = _wilder_smooth(-delta.clip(upper=0), period)
+    gain, loss = float(avg_gain.iloc[-1]), float(avg_loss.iloc[-1])
+    if math.isnan(gain) or math.isnan(loss):
+        return None
+    if loss == 0:
+        return 100.0 if gain > 0 else None
+    return 100 - (100 / (1 + gain / loss))
 
 
 def _macd(

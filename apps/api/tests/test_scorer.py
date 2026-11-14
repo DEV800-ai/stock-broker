@@ -158,3 +158,54 @@ def test_one_day_volume_spike_does_not_move_volume_score():
     assert b["volume_ratio"] == 3.0  # 1-day stat still stored
     assert b["signals_fired"]["volume_surge"]
     assert b["volume_score"] - a["volume_score"] < 0.1  # only 1/20 of the 20d avg
+
+
+# --- RSI (Wilder) -------------------------------------------------------------
+
+from broker.ranking.scorer import _rsi  # noqa: E402
+
+# StockCharts "RSI" ChartSchool worked example (Wilder smoothing, 14 periods).
+_SC_CLOSES = [
+    44.34, 44.09, 44.15, 43.61, 44.33, 44.83, 45.10, 45.42, 45.84, 46.08, 45.89,
+    46.03, 45.61, 46.28, 46.28, 46.00, 46.03, 46.41, 46.22, 45.64, 46.21, 46.25,
+    45.71, 46.45, 45.78, 45.35, 44.03, 44.18, 44.22, 44.57, 43.42, 42.66, 43.13,
+]
+_SC_RSI = [
+    70.53, 66.32, 66.55, 69.41, 66.36, 57.97, 62.93, 63.26, 56.06, 62.38,
+    54.71, 50.42, 39.99, 41.46, 41.87, 45.46, 37.30, 33.08, 37.77,
+]
+
+
+def test_rsi_matches_wilder_reference_values():
+    # Published table rounds intermediate averages to 2 dp (0.24 / 0.10), so it
+    # differs from the unrounded computation by < 0.1 throughout.
+    for i, expected in enumerate(_SC_RSI):
+        got = _rsi(pd.Series(_SC_CLOSES[: 15 + i]))
+        assert abs(got - expected) < 0.1, (i, got, expected)
+
+
+def test_rsi_exact_wilder_recursion():
+    # First 14 changes: avg gain = 3.34 / 14, avg loss = 1.40 / 14 (SMA seed).
+    g0, l0 = 3.34 / 14, 1.40 / 14
+    assert abs(_rsi(pd.Series(_SC_CLOSES[:15])) - (100 - 100 / (1 + g0 / l0))) < 1e-9
+    # Next close 46.28 -> 46.00 is a 0.28 loss; Wilder: avg = (prev * 13 + x) / 14.
+    g1, l1 = (g0 * 13 + 0.0) / 14, (l0 * 13 + 0.28) / 14
+    assert abs(_rsi(pd.Series(_SC_CLOSES[:16])) - (100 - 100 / (1 + g1 / l1))) < 1e-9
+
+
+def test_rsi_differs_from_simple_rolling_mean():
+    closes = pd.Series(_SC_CLOSES)
+    delta = closes.diff().dropna()
+    sma_gain = delta.clip(lower=0).rolling(14).mean().iloc[-1]
+    sma_loss = (-delta.clip(upper=0)).rolling(14).mean().iloc[-1]
+    sma_rsi = 100 - 100 / (1 + sma_gain / sma_loss)
+    assert abs(_rsi(closes) - 37.77) < 0.1
+    assert abs(sma_rsi - 37.77) > 1.0  # the old implementation was off
+
+
+def test_rsi_edge_cases():
+    assert _rsi(pd.Series([1.0] * 14)) is None  # too short
+    assert _rsi(pd.Series([float(i) for i in range(30)])) == 100.0  # no losses
+    assert _rsi(pd.Series([5.0] * 30)) is None  # no movement at all
+    falling = _rsi(pd.Series([float(30 - i) for i in range(30)]))
+    assert falling == 0.0
