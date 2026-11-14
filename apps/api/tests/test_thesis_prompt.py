@@ -1,0 +1,42 @@
+from datetime import date
+
+from broker.ai.thesis_agent import _build_user_prompt
+from broker.models.scan import ScanResult
+
+
+def _scan(**overrides) -> ScanResult:
+    fields = dict(
+        ticker="AAPL", scan_date=date(2026, 11, 13), price=110.0,
+        sma50=100.0, sma200=90.0, rsi_14=61.234,
+        rs_excess_3m=0.052, rs_excess_6m=-0.013, volume_trend_ratio=1.21,
+        macd=1.5, macd_signal=1.1, macd_histogram=0.4,
+        bb_upper=115.0, bb_lower=95.0, bb_percent_b=0.75,
+        pct_change_1d=0.031, gap_score=0.9,
+        composite_score=0.62, momentum_score=0.7, rs_score=0.55, volume_score=0.6,
+        signals_fired={"macd_bullish": True, "above_both_smas": True},
+    )
+    fields.update(overrides)
+    return ScanResult(**fields)
+
+
+def test_prompt_has_compact_technical_summary():
+    p = _build_user_prompt("AAPL", _scan())
+    assert "Trend: above SMA-50 (+10.0%); above SMA-200 (+22.2%); SMA-50 above SMA-200" in p
+    assert "3-month +5.2%, 6-month -1.3%" in p
+    assert "RSI-14 (Wilder): 61.2" in p
+    assert "Volume trend (20-day avg vs 60-day avg): 1.21x" in p
+
+
+def test_prompt_drops_raw_macd_bollinger_and_one_day_numbers():
+    p = _build_user_prompt("AAPL", _scan())
+    for gone in ("MACD (12,26,9)", "Bollinger", "%B", "1-day change", "gap="):
+        assert gone not in p
+    # signal flags themselves stay
+    assert "macd_bullish" in p
+
+
+def test_prompt_handles_missing_stats():
+    p = _build_user_prompt("AAPL", _scan(sma200=None, rs_excess_6m=None, volume_trend_ratio=None))
+    assert "SMA-200 N/A" in p
+    assert "6-month N/A" in p
+    assert "Volume trend (20-day avg vs 60-day avg): N/A" in p

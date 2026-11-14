@@ -209,3 +209,16 @@ def test_rsi_edge_cases():
     assert _rsi(pd.Series([5.0] * 30)) is None  # no movement at all
     falling = _rsi(pd.Series([float(30 - i) for i in range(30)]))
     assert falling == 0.0
+
+
+def test_macd_and_bollinger_do_not_feed_composite(monkeypatch):
+    import broker.ranking.scorer as scorer
+
+    bars = _make_bars(220)
+    base = compute_scores(bars)
+    monkeypatch.setattr(scorer, "_macd", lambda closes: (99.0, -99.0, 198.0))
+    monkeypatch.setattr(scorer, "_bollinger_bands", lambda closes: (1.0, 0.0, 5.0))
+    changed = compute_scores(bars)
+    assert changed["composite_score"] == base["composite_score"]
+    assert changed["signals_fired"]["macd_bullish"]  # flags still fire
+    assert changed["signals_fired"]["above_upper_band"]

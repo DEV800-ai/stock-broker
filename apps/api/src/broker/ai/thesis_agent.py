@@ -44,8 +44,8 @@ market data objectively — you never recommend buying or selling.
 
 The user prompt states a target holding horizon. Calibrate `why_interesting`, \
 `risk_factors`, and `confidence` to that horizon: weigh signals that persist \
-over that timeframe (e.g. trend vs. moving averages, sector relative \
-strength, MACD trend direction) more heavily than signals that are only \
+over that timeframe (e.g. trend vs. moving averages, 3-6 month relative \
+strength vs the sector, volume trend) more heavily than signals that are only \
 meaningful intraday or over a few days (e.g. a single day's gap or volume \
 spike), and call out in `risk_factors` when a short-term signal may not \
 hold over the stated horizon.
@@ -74,7 +74,7 @@ Respond ONLY with valid JSON matching this schema (no markdown, no preamble):
 # Bump when _SYSTEM_PROMPT or _build_user_prompt changes in a way that could
 # change the model's output for the same ticker/date/signals — forces cached
 # theses to regenerate instead of silently returning stale reasoning.
-_PROMPT_VERSION = 3
+_PROMPT_VERSION = 4
 
 
 def _input_hash(ticker: str, scan_date: str, signals: dict | None) -> str:
@@ -89,29 +89,43 @@ def _fmt(v: float | None, decimals: int = 2) -> str:
     return f"{v:.{decimals}f}" if v is not None else "N/A"
 
 
+def _fmt_pct(v: float | None) -> str:
+    return f"{v * 100:+.1f}%" if v is not None else "N/A"
+
+
+def _trend_summary(scan: ScanResult) -> str:
+    def _vs(sma: float | None, label: str) -> str:
+        if sma is None or scan.price is None or sma == 0:
+            return f"{label} N/A"
+        side = "above" if scan.price > sma else "below"
+        return f"{side} {label} ({_fmt_pct(scan.price / sma - 1)})"
+
+    parts = [_vs(scan.sma50, "SMA-50"), _vs(scan.sma200, "SMA-200")]
+    if scan.sma50 is not None and scan.sma200 is not None:
+        parts.append("SMA-50 above SMA-200" if scan.sma50 > scan.sma200 else "SMA-50 below SMA-200")
+    return "; ".join(parts)
+
+
 def _build_user_prompt(ticker: str, scan: ScanResult | None, news_text: str = "") -> str:
     if scan is None:
         base = f"Ticker: {ticker}\nNo scan data available. Describe general considerations."
     else:
         signals_fired = list(scan.signals_fired.keys()) if scan.signals_fired else []
+        # Compact technical summary: one line per independent dimension
+        # (trend, relative strength, RSI, volume trend). MACD / Bollinger are
+        # omitted on purpose — they re-measure the same price momentum.
         lines = [
             f"Ticker: {ticker}",
             f"Scan date: {scan.scan_date}",
             f"Target holding horizon: {settings.thesis_target_horizon}",
             f"Price: ${_fmt(scan.price)}",
-            f"1-day change: {_fmt(scan.pct_change_1d and scan.pct_change_1d * 100)}%",
-            f"5-day change: {_fmt(scan.pct_change_5d and scan.pct_change_5d * 100)}%",
-            f"20-day change: {_fmt(scan.pct_change_20d and scan.pct_change_20d * 100)}%",
-            f"RSI-14: {_fmt(scan.rsi_14)}",
-            f"MACD (12,26,9): line={_fmt(scan.macd)}, signal={_fmt(scan.macd_signal)}, "
-            f"histogram={_fmt(scan.macd_histogram)}",
-            f"Bollinger Bands (20, 2σ): upper={_fmt(scan.bb_upper)}, lower={_fmt(scan.bb_lower)}, "
-            f"%B={_fmt(scan.bb_percent_b)} (0=at lower band, 1=at upper band)",
-            f"Volume ratio (vs 20-day avg): {_fmt(scan.volume_ratio)}x",
-            f"Above SMA-50: {scan.above_sma50}",
-            f"Above SMA-200: {scan.above_sma200}",
-            f"Composite score: {_fmt(scan.composite_score, 3)} (volume={_fmt(scan.volume_score, 3)}, "
-            f"momentum={_fmt(scan.momentum_score, 3)}, rs={_fmt(scan.rs_score, 3)}, gap={_fmt(scan.gap_score, 3)})",
+            f"Trend: {_trend_summary(scan)}",
+            f"Relative strength vs sector ETF: 3-month {_fmt_pct(scan.rs_excess_3m)}, "
+            f"6-month {_fmt_pct(scan.rs_excess_6m)} (excess return)",
+            f"RSI-14 (Wilder): {_fmt(scan.rsi_14, 1)}",
+            f"Volume trend (20-day avg vs 60-day avg): {_fmt(scan.volume_trend_ratio)}x",
+            f"Composite score: {_fmt(scan.composite_score, 3)} (momentum={_fmt(scan.momentum_score, 3)}, "
+            f"rs={_fmt(scan.rs_score, 3)}, volume={_fmt(scan.volume_score, 3)})",
             f"Signals fired: {', '.join(signals_fired) if signals_fired else 'none'}",
         ]
         base = "\n".join(lines)
