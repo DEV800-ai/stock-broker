@@ -66,6 +66,20 @@ def _rsi(closes: pd.Series, period: int = 14) -> float | None:
     return 100 - (100 / (1 + gain / loss))
 
 
+def _atr(bars: pd.DataFrame, period: int = 14) -> float | None:
+    """Average True Range with Wilder smoothing (TradingView ``ta.atr``).
+
+    True range = max(high - low, |high - prev close|, |low - prev close|).
+    """
+    if len(bars) < period + 1 or bars[["high", "low", "close"]].isna().any().any():
+        return None
+    high, low = bars["high"].astype(float), bars["low"].astype(float)
+    prev_close = bars["close"].astype(float).shift(1)
+    tr = pd.concat([high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1).max(axis=1)
+    atr = _wilder_smooth(tr.iloc[1:].reset_index(drop=True), period).iloc[-1]
+    return float(atr) if not math.isnan(atr) else None
+
+
 def _macd(
     closes: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9
 ) -> tuple[float | None, float | None, float | None]:
@@ -127,6 +141,7 @@ def compute_scores(
     sma200 = float(closes.tail(200).mean()) if len(closes) >= 200 else None
 
     rsi_14 = _rsi(closes)
+    atr_14 = _atr(bars)
     macd, macd_signal, macd_histogram = _macd(closes)
     bb_upper, bb_lower, bb_percent_b = _bollinger_bands(closes)
 
@@ -187,6 +202,7 @@ def compute_scores(
         "sma50": sma50,
         "sma200": sma200,
         "rsi_14": rsi_14,
+        "atr_14": atr_14,
         "macd": macd,
         "macd_signal": macd_signal,
         "macd_histogram": macd_histogram,

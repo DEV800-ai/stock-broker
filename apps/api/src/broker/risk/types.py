@@ -21,6 +21,7 @@ class TradeProposal:
     uses_margin: bool = False
     is_short: bool = False
     is_option: bool = False
+    stop_price: float | None = None
 
 
 @dataclass

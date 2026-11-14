@@ -55,6 +55,7 @@ class ScanResult(Base):
     sma50: Mapped[float | None] = mapped_column(Double)
     sma200: Mapped[float | None] = mapped_column(Double)
     rsi_14: Mapped[float | None] = mapped_column(Double)
+    atr_14: Mapped[float | None] = mapped_column(Double)  # Wilder ATR(14)
     macd: Mapped[float | None] = mapped_column(Double)
     macd_signal: Mapped[float | None] = mapped_column(Double)
     macd_histogram: Mapped[float | None] = mapped_column(Double)

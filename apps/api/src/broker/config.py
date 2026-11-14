@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     scan_stale_after_minutes: int = 120
 
     paper_account_equity: float = 100_000.0
+    # Order-preview context (orders/sizing.py): stop = entry - atr_stop_multiple*ATR,
+    # reference target = entry + atr_target_multiple*ATR, risk-based size =
+    # equity * risk_per_trade / (entry - stop), capped by the max-position rule.
+    risk_per_trade: float = 0.01
+    atr_stop_multiple: float = 2.0
+    atr_target_multiple: float = 3.0
     risk_cooldown_days: int = 14
     order_preview_ttl_minutes: int = 5
 

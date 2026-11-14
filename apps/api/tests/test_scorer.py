@@ -222,3 +222,37 @@ def test_macd_and_bollinger_do_not_feed_composite(monkeypatch):
     assert changed["composite_score"] == base["composite_score"]
     assert changed["signals_fired"]["macd_bullish"]  # flags still fire
     assert changed["signals_fired"]["above_upper_band"]
+
+
+# --- ATR(14), Wilder -------------------------------------------------------------
+
+from broker.ranking.scorer import _atr  # noqa: E402
+
+
+def _ohlc(highs, lows, closes) -> pd.DataFrame:
+    return pd.DataFrame({"high": highs, "low": lows, "close": closes})
+
+
+def test_atr_constant_range_equals_range():
+    n = 30
+    bars = _ohlc([101.0] * n, [99.0] * n, [100.0] * n)
+    assert abs(_atr(bars) - 2.0) < 1e-12
+
+
+def test_atr_uses_true_range_and_wilder_recursion():
+    # 15 bars with high-low = 2 and flat closes → first ATR (SMA of 14 TRs) = 2.
+    highs, lows, closes = [101.0] * 15, [99.0] * 15, [100.0] * 15
+    assert abs(_atr(_ohlc(highs, lows, closes)) - 2.0) < 1e-12
+    # Next bar gaps up: high-low is 2 but |high - prev close| = 12 → TR = 12.
+    highs.append(112.0); lows.append(110.0); closes.append(111.0)
+    expected = (2.0 * 13 + 12.0) / 14
+    assert abs(_atr(_ohlc(highs, lows, closes)) - expected) < 1e-12
+
+
+def test_atr_too_short_or_missing_data():
+    assert _atr(_ohlc([1.0] * 14, [1.0] * 14, [1.0] * 14)) is None
+    assert _atr(_ohlc([101.0] * 20, [None] * 20, [100.0] * 20)) is None
+
+
+def test_compute_scores_stores_atr():
+    assert abs(compute_scores(_make_bars(60))["atr_14"] - 2.0) < 1e-9  # high/low = close ± 1

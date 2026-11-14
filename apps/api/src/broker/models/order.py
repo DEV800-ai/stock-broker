@@ -24,6 +24,12 @@ class OrderPreview(Base):
     bear_case: Mapped[str | None] = mapped_column(Text)
     portfolio_impact: Mapped[str | None] = mapped_column(Text)
 
+    # Descriptive ATR-based context (orders/sizing.py) — not recommendations.
+    atr_14: Mapped[float | None] = mapped_column(Double)
+    stop_price: Mapped[float | None] = mapped_column(Double)  # entry - 2*ATR unless given
+    reference_target: Mapped[float | None] = mapped_column(Double)  # entry + 3*ATR
+    risk_sized_shares: Mapped[int | None] = mapped_column(Integer)
+
     risk_status: Mapped[str] = mapped_column(String(30), nullable=False)
     approval_required: Mapped[bool] = mapped_column(Boolean, default=True)
 

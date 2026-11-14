@@ -45,6 +45,18 @@ def check_has_thesis(ctx: RiskContext) -> RuleResult:
     return RuleResult("has_thesis", True, "Thesis attached")
 
 
+def check_has_stop(ctx: RiskContext) -> RuleResult:
+    """Every buy preview must carry a protective stop below the entry price."""
+    if ctx.proposal.action != "BUY":
+        return RuleResult("has_stop", True, "Not a buy; no stop required")
+    stop, entry = ctx.proposal.stop_price, ctx.proposal.limit_price
+    if stop is None:
+        return RuleResult("has_stop", False, "No stop price on this preview (ATR unavailable and none given)", "block")
+    if entry is not None and stop >= entry:
+        return RuleResult("has_stop", False, f"Stop {stop:.2f} is not below entry {entry:.2f}", "block")
+    return RuleResult("has_stop", True, f"Stop at {stop:.2f}")
+
+
 def check_liquidity(ctx: RiskContext) -> RuleResult:
     if ctx.avg_daily_volume is None:
         return RuleResult("liquidity", False, "Average daily volume unknown", "needs_manual_review")
@@ -169,6 +181,7 @@ RULES = [
     check_no_options,
     check_no_shorting,
     check_has_thesis,
+    check_has_stop,
     check_liquidity,
     check_max_daily_loss,
     check_max_weekly_loss,

@@ -133,6 +133,12 @@ export interface OrderPreview {
   bull_case: string | null;
   bear_case: string | null;
   portfolio_impact: string | null;
+  // Descriptive ATR context (not recommendations): stop = entry - 2xATR,
+  // reference = entry + 3xATR, size = 1% equity risk to the stop, capped.
+  atr_14: number | null;
+  stop_price: number | null;
+  reference_target: number | null;
+  risk_sized_shares: number | null;
   risk_status: OrderRiskStatus;
   approval_required: boolean;
   status: OrderPreviewStatus;

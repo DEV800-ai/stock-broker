@@ -18,6 +18,7 @@ def make_ctx(**overrides) -> RiskContext:
             estimated_value=496.0,
             sector="Aerospace",
             thesis_id=1,
+            stop_price=11.50,
         ),
     )
     portfolio = overrides.pop(
@@ -97,7 +98,7 @@ def test_unknown_liquidity_needs_manual_review():
 def test_oversized_position_needs_smaller_size():
     proposal = TradeProposal(
         ticker="RKLB", action="BUY", order_type="LIMIT", shares=1000,
-        limit_price=12.4, estimated_value=12_400.0, sector="Aerospace",
+        limit_price=12.4, estimated_value=12_400.0, sector="Aerospace", stop_price=11.5,
     )
     result = evaluate(make_ctx(proposal=proposal))
     assert result.verdict == "needs_smaller_size"
@@ -107,7 +108,7 @@ def test_oversized_position_needs_smaller_size():
 def test_existing_position_counts_toward_max_position_size():
     proposal = TradeProposal(
         ticker="RKLB", action="BUY", order_type="LIMIT", shares=10,
-        limit_price=12.4, estimated_value=124.0, sector="Aerospace",
+        limit_price=12.4, estimated_value=124.0, sector="Aerospace", stop_price=11.5,
     )
     portfolio = PortfolioState(
         net_liquidation=25_000.0, cash=10_000.0,
@@ -121,7 +122,7 @@ def test_existing_position_counts_toward_max_position_size():
 def test_oversized_sector_exposure_needs_smaller_size():
     proposal = TradeProposal(
         ticker="RKLB", action="BUY", order_type="LIMIT", shares=10,
-        limit_price=12.4, estimated_value=124.0, sector="Aerospace",
+        limit_price=12.4, estimated_value=124.0, sector="Aerospace", stop_price=11.5,
     )
     portfolio = PortfolioState(
         net_liquidation=25_000.0, cash=10_000.0,
@@ -141,7 +142,7 @@ def test_daily_loss_halt_blocks_new_buys():
 def test_daily_loss_halt_does_not_block_sells():
     proposal = TradeProposal(
         ticker="RKLB", action="SELL", order_type="LIMIT", shares=10,
-        limit_price=12.4, estimated_value=124.0, sector="Aerospace",
+        limit_price=12.4, estimated_value=124.0, sector="Aerospace", stop_price=11.5,
     )
     portfolio = PortfolioState(net_liquidation=25_000.0, cash=10_000.0, realized_pnl_today=-5_000.0)
     result = evaluate(make_ctx(proposal=proposal, portfolio=portfolio))
@@ -203,7 +204,7 @@ def test_paper_only_does_not_override_a_hard_block():
 def test_block_takes_precedence_over_needs_smaller_size():
     proposal = TradeProposal(
         ticker="RKLB", action="BUY", order_type="LIMIT", shares=1000,
-        limit_price=12.4, estimated_value=12_400.0, sector="Aerospace", is_option=True,
+        limit_price=12.4, estimated_value=12_400.0, sector="Aerospace", stop_price=11.5, is_option=True,
     )
     result = evaluate(make_ctx(proposal=proposal))
     assert result.verdict == "blocked"
@@ -212,7 +213,7 @@ def test_block_takes_precedence_over_needs_smaller_size():
 def test_sell_action_skips_sizing_and_loss_checks():
     proposal = TradeProposal(
         ticker="RKLB", action="SELL", order_type="LIMIT", shares=1000,
-        limit_price=12.4, estimated_value=12_400.0, sector="Aerospace",
+        limit_price=12.4, estimated_value=12_400.0, sector="Aerospace", stop_price=11.5,
     )
     portfolio = PortfolioState(net_liquidation=25_000.0, cash=10_000.0, realized_pnl_today=-2_000.0)
     result = evaluate(make_ctx(proposal=proposal, portfolio=portfolio))
@@ -228,6 +229,7 @@ def _buy(value: float) -> TradeProposal:
     return TradeProposal(
         ticker="RKLB", action="BUY", order_type="LIMIT", shares=1,
         limit_price=value, estimated_value=value, sector="Aerospace", thesis_id=1,
+        stop_price=value * 0.9,
     )
 
 

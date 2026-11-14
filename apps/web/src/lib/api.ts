@@ -142,6 +142,7 @@ export const api = {
     shares?: number;
     amount_usd?: number;
     limit_price?: number;
+    stop_price?: number;
     order_type?: string;
     time_in_force?: string;
     execution_mode?: string;
