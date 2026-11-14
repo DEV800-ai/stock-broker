@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,9 +38,36 @@ export default function DashboardPage() {
     load();
   }, []);
 
+  // Polling. Each round is scheduled only after the previous one finishes
+  // (setTimeout chain, not setInterval), so slow responses never stack up
+  // concurrent requests. While a scan runs, only the cheap progress endpoint
+  // is polled; the full dashboard reloads when the scan stops running.
+  const wasRunning = useRef(false);
   useEffect(() => {
-    const interval = setInterval(load, isRunning ? 3_000 : 60_000);
-    return () => clearInterval(interval);
+    if (wasRunning.current && !isRunning) load();
+    wasRunning.current = isRunning;
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const delay = isRunning ? 5_000 : 60_000;
+    async function tick() {
+      if (isRunning) {
+        try {
+          const r = await api.scanRuns(5);
+          if (!cancelled) setRuns(r);
+        } catch (err) {
+          console.error(err);
+        }
+      } else {
+        await load();
+      }
+      if (!cancelled) timer = setTimeout(tick, delay);
+    }
+    timer = setTimeout(tick, delay);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [isRunning]);
 
   async function handleTriggerScan() {
