@@ -1,10 +1,39 @@
 """Signal scoring for scanned tickers.
 
-Each sub-score is 0.0–1.0. Composite is a weighted average.
+Each sub-score is 0.0–1.0. Composite is a weighted average of the
+momentum/trend, relative-strength and volume-trend sub-scores, tuned for the
+1–3 month holding horizon the thesis assumes. Weights come from settings
+(``composite_weight_*``) so they can be re-tuned from the signal-outcome
+report without a code change. ``gap_score`` is still computed and stored so
+its predictive value can be measured, but it no longer feeds the composite.
 """
 import math
 
 import pandas as pd
+
+# Bump when the *formulas* (not just the weights) change, so the
+# signal-outcome report can compare results across scoring versions.
+SCORING_FORMULA_VERSION = "v2"
+
+RS_LOOKBACKS = (63, 126)  # ~3 and ~6 months of trading days
+
+
+def composite_weights(settings=None) -> dict[str, float]:
+    if settings is None:
+        from broker.config import settings
+    return {
+        "momentum": settings.composite_weight_momentum,
+        "rs": settings.composite_weight_rs,
+        "volume": settings.composite_weight_volume,
+    }
+
+
+def weights_version(weights: dict[str, float]) -> str:
+    """Stable label for a formula version + weight set, e.g. "v2:m0.40-rs0.40-v0.20"."""
+    return (
+        f"{SCORING_FORMULA_VERSION}:m{weights['momentum']:.2f}"
+        f"-rs{weights['rs']:.2f}-v{weights['volume']:.2f}"
+    )
 
 
 def _rsi(closes: pd.Series, period: int = 14) -> float | None:
@@ -47,11 +76,17 @@ def _bollinger_bands(
     return upper, lower, percent_b
 
 
-def compute_scores(bars: pd.DataFrame, sector_bars: pd.DataFrame | None = None) -> dict:
+def compute_scores(
+    bars: pd.DataFrame,
+    sector_bars: pd.DataFrame | None = None,
+    weights: dict[str, float] | None = None,
+) -> dict:
     """Compute all signal scores from a DataFrame of daily OHLCV bars.
 
     bars: columns [bar_date, open, high, low, close, volume], sorted ascending.
-    sector_bars: same schema for the sector ETF (used for relative strength).
+    sector_bars: [bar_date, close] for the benchmark (sector ETF) used for
+        relative strength.
+    weights: composite weights {"momentum", "rs", "volume"}; defaults to settings.
     Returns a dict matching ScanResult fields.
     """
     if bars.empty or len(bars) < 5:
@@ -77,9 +112,14 @@ def compute_scores(bars: pd.DataFrame, sector_bars: pd.DataFrame | None = None) 
     macd, macd_signal, macd_histogram = _macd(closes)
     bb_upper, bb_lower, bb_percent_b = _bollinger_bands(closes)
 
+    # 1-day spike ratio: stored stat + volume_surge flag only (not scored).
     avg_vol_20 = float(volumes.tail(21).iloc[:-1].mean()) if len(volumes) >= 21 else None
     today_vol = float(today["volume"]) if today["volume"] else 0.0
     volume_ratio = (today_vol / avg_vol_20) if avg_vol_20 and avg_vol_20 > 0 else None
+    # Accumulation: 20-day average volume vs 60-day average volume.
+    volume_trend_ratio = _volume_trend_ratio(volumes)
+
+    rs_excess_3m, rs_excess_6m = _rs_excess(closes, sector_bars)
 
     prev_close = float(closes.iloc[-2]) if len(closes) >= 2 else None
     gap_pct = ((float(today["open"]) - prev_close) / prev_close) if prev_close and today["open"] else None
@@ -88,20 +128,15 @@ def compute_scores(bars: pd.DataFrame, sector_bars: pd.DataFrame | None = None) 
     above_sma200 = (price > sma200) if sma200 else None
 
     # --- sub-scores ---
-    volume_score = _volume_score(volume_ratio)
-    momentum_score = _momentum_score(rsi_14, pct_change_1d, pct_change_5d, above_sma50, above_sma200)
-    rs_score = _rs_score(pct_change_20d, sector_bars)
-    gap_score = _gap_score(gap_pct)
+    volume_score = _volume_score(volume_trend_ratio)
+    momentum_score = _momentum_score(rsi_14, pct_change_5d, above_sma50, above_sma200)
+    rs_score = _rs_score(rs_excess_3m, rs_excess_6m)
+    gap_score = _gap_score(gap_pct)  # stored for measurement, not in composite
 
-    # weighted composite
-    weights = {"volume": 0.25, "momentum": 0.35, "rs": 0.30, "gap": 0.10}
-    scores = {"volume": volume_score, "momentum": momentum_score, "rs": rs_score, "gap": gap_score}
-    valid = {k: v for k, v in scores.items() if v is not None}
-    if valid:
-        total_weight = sum(weights[k] for k in valid)
-        composite = sum(v * weights[k] for k, v in valid.items()) / total_weight
-    else:
-        composite = None
+    weights = weights or composite_weights()
+    composite = _composite(
+        {"momentum": momentum_score, "rs": rs_score, "volume": volume_score}, weights
+    )
 
     signals: dict[str, bool] = {}
     if volume_ratio and volume_ratio >= 2.0:
@@ -124,6 +159,9 @@ def compute_scores(bars: pd.DataFrame, sector_bars: pd.DataFrame | None = None) 
     return {
         "price": price,
         "volume_ratio": volume_ratio,
+        "volume_trend_ratio": volume_trend_ratio,
+        "rs_excess_3m": rs_excess_3m,
+        "rs_excess_6m": rs_excess_6m,
         "pct_change_1d": pct_change_1d,
         "pct_change_5d": pct_change_5d,
         "pct_change_20d": pct_change_20d,
@@ -159,16 +197,33 @@ def _pct(closes: pd.Series, n: int) -> float | None:
     return float((closes.iloc[-1] - past) / past)
 
 
-def _volume_score(volume_ratio: float | None) -> float | None:
-    if volume_ratio is None:
+def _composite(scores: dict[str, float | None], weights: dict[str, float]) -> float | None:
+    """Weighted average over the sub-scores that are available (re-normalised)."""
+    valid = {k: v for k, v in scores.items() if v is not None and weights.get(k, 0) > 0}
+    if not valid:
         return None
-    # 1x avg → 0.0, 3x avg → 1.0, capped
-    return min(max((volume_ratio - 1.0) / 2.0, 0.0), 1.0)
+    total_weight = sum(weights[k] for k in valid)
+    return sum(v * weights[k] for k, v in valid.items()) / total_weight
+
+
+def _volume_trend_ratio(volumes: pd.Series) -> float | None:
+    if len(volumes) < 60:
+        return None
+    avg_60 = float(volumes.tail(60).mean())
+    if avg_60 <= 0:
+        return None
+    return float(volumes.tail(20).mean()) / avg_60
+
+
+def _volume_score(volume_trend_ratio: float | None) -> float | None:
+    if volume_trend_ratio is None:
+        return None
+    # 20d/60d avg volume: 0.75x → 0.0, 1.125x → 0.5, 1.5x → 1.0, clamped.
+    return min(max((volume_trend_ratio - 0.75) / 0.75, 0.0), 1.0)
 
 
 def _momentum_score(
     rsi: float | None,
-    pct_1d: float | None,
     pct_5d: float | None,
     above_sma50: bool | None,
     above_sma200: bool | None,
@@ -187,9 +242,6 @@ def _momentum_score(
             # overbought — diminishing returns
             parts.append(max(1.0 - (rsi - 70) / 30 * 0.5, 0.5))
 
-    if pct_1d is not None:
-        parts.append(min(max((pct_1d + 0.02) / 0.08, 0.0), 1.0))
-
     if pct_5d is not None:
         parts.append(min(max((pct_5d + 0.02) / 0.15, 0.0), 1.0))
 
@@ -202,21 +254,38 @@ def _momentum_score(
     return float(sum(parts) / len(parts)) if parts else None
 
 
-def _rs_score(pct_20d: float | None, sector_bars: pd.DataFrame | None) -> float | None:
-    if pct_20d is None:
+def _rs_excess(
+    closes: pd.Series, sector_bars: pd.DataFrame | None
+) -> tuple[float | None, float | None]:
+    """Excess return vs the benchmark over ~3 and ~6 months (63/126 bars).
+
+    Falls back to the ticker's absolute return when no benchmark bars exist.
+    """
+    bench = None
+    if sector_bars is not None and not sector_bars.empty:
+        bench = sector_bars.sort_values("bar_date").reset_index(drop=True)["close"]
+    out: list[float | None] = []
+    for n in RS_LOOKBACKS:
+        own = _pct(closes, n)
+        if own is None:
+            out.append(None)
+            continue
+        if bench is None:
+            out.append(own)
+            continue
+        b = _pct(bench, n)
+        out.append(own - b if b is not None else None)
+    return out[0], out[1]
+
+
+def _rs_score(excess_3m: float | None, excess_6m: float | None) -> float | None:
+    vals = [v for v in (excess_3m, excess_6m) if v is not None]
+    if not vals:
         return None
-    if sector_bars is None or sector_bars.empty:
-        # no sector comparison — score based on absolute 20d return
-        return min(max((pct_20d + 0.05) / 0.20, 0.0), 1.0)
-
-    sector_bars = sector_bars.sort_values("bar_date").reset_index(drop=True)
-    sector_pct = _pct(sector_bars["close"], 20)
-    if sector_pct is None:
-        return min(max((pct_20d + 0.05) / 0.20, 0.0), 1.0)
-
-    excess = pct_20d - sector_pct
-    # +5% excess → 0.5, +15% excess → 1.0, -10% excess → 0.0
-    return min(max((excess + 0.10) / 0.25, 0.0), 1.0)
+    excess = sum(vals) / len(vals)
+    # Mean 3m/6m excess vs benchmark: -10% → 0.0, +5% → 0.5, +20% → 1.0
+    # i.e. (excess + 0.10) / 0.30, clamped to [0, 1].
+    return min(max((excess + 0.10) / 0.30, 0.0), 1.0)
 
 
 def _gap_score(gap_pct: float | None) -> float | None:

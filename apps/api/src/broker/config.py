@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     sec_edgar_user_agent: str = ""
 
     scanner_min_score: float = 0.30
+    # Composite weights (see ranking/scorer.py). Tune from the
+    # /reports/signal-outcomes IC results; the active set is recorded on each
+    # ScanRun.params_json["weights_version"].
+    composite_weight_momentum: float = 0.40
+    composite_weight_rs: float = 0.40
+    composite_weight_volume: float = 0.20
     thesis_min_score: float = 0.50
     thesis_recheck_max_age_hours: int = 24
     # Holding horizon the thesis agent is told to calibrate its reasoning and

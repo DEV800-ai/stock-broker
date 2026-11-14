@@ -13,12 +13,15 @@ from broker.models.price_bar import PriceBar
 from broker.models.scan import ScanResult, ScanRun
 from broker.models.universe import StockUniverse
 from broker.models.watchlist import WatchlistEntry
-from broker.ranking.scorer import compute_scores
+from broker.ranking.scorer import composite_weights, compute_scores, weights_version
 
 logger = logging.getLogger(__name__)
 
 _BATCH_SIZE = 50
 _BARS_DAYS = 220  # enough for SMA-200 + buffer
+# Relative-strength benchmark for tickers with no mapped sector ETF
+# (ETFs themselves, unknown sectors).
+_FALLBACK_BENCHMARK = "SPY"
 
 
 def load_recent_bars(db: Session, ticker: str, columns: list[str], n: int = _BARS_DAYS):
@@ -48,7 +51,15 @@ class ScanRunner:
         self.db = db
 
     def run_full_scan(self) -> None:
-        run = ScanRun(started_at=datetime.utcnow(), status="running")
+        self.weights = composite_weights()
+        run = ScanRun(
+            started_at=datetime.utcnow(),
+            status="running",
+            params_json={
+                "weights_version": weights_version(self.weights),
+                "weights": self.weights,
+            },
+        )
         self.db.add(run)
         self.db.commit()
         self.db.refresh(run)
@@ -178,7 +189,7 @@ class ScanRunner:
 
     def _load_sector_bars(self) -> dict[str, object]:
         """Load the most recent price bars for all sector ETFs from DB."""
-        etf_tickers = list(set(SECTOR_ETF_MAP.values()))
+        etf_tickers = list(set(SECTOR_ETF_MAP.values()) | {_FALLBACK_BENCHMARK})
         result: dict[str, object] = {}
         for etf in etf_tickers:
             df = load_recent_bars(self.db, etf, ["bar_date", "close"])
@@ -202,10 +213,10 @@ class ScanRunner:
                 continue
 
             sector = sector_map.get(ticker)
-            etf = SECTOR_ETF_MAP.get(sector) if sector else None
-            sector_df = sector_bars.get(etf) if etf else None
+            etf = (SECTOR_ETF_MAP.get(sector) if sector else None) or _FALLBACK_BENCHMARK
+            sector_df = sector_bars.get(etf)
 
-            scores = compute_scores(bars_df, sector_df)
+            scores = compute_scores(bars_df, sector_df, weights=getattr(self, "weights", None))
             if not scores:
                 continue
 

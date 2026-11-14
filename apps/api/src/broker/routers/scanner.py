@@ -28,6 +28,7 @@ class ScanRunOut(BaseModel):
     phase: str | None
     total_tickers: int | None
     tickers_processed: int | None
+    params_json: dict | None = None
 
     model_config = {"from_attributes": True}
 
@@ -43,6 +44,9 @@ class ScanResultOut(BaseModel):
     gap_score: float | None
     price: float | None
     volume_ratio: float | None
+    volume_trend_ratio: float | None = None
+    rs_excess_3m: float | None = None
+    rs_excess_6m: float | None = None
     pct_change_1d: float | None
     pct_change_5d: float | None
     rsi_14: float | None
