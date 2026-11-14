@@ -10,6 +10,16 @@ logger = logging.getLogger(__name__)
 _DOWNLOAD_TIMEOUT = 30
 
 
+def start_date_for_trading_days(days: int, today: date | None = None) -> date:
+    """Calendar start date that covers at least ``days`` trading days.
+
+    ~252 trading days per 365 calendar days (ratio ~1.45), plus a fixed buffer
+    for market holidays. Callers then ``.tail(days)`` the result.
+    """
+    today = today or date.today()
+    return today - timedelta(days=int(days * 1.45) + 15)
+
+
 def _download_with_deadline(*args, **kwargs):
     """Run yf.download with a hard wall-clock deadline.
 
@@ -35,7 +45,7 @@ def get_bars(ticker: str, days: int = 200) -> pd.DataFrame:
     yfinance is for research/backfill only — not for live trading decisions.
     """
     try:
-        start = date.today() - timedelta(days=days + 10)  # buffer for weekends/holidays
+        start = start_date_for_trading_days(days)
         df = _download_with_deadline(
             ticker, start=start.isoformat(), auto_adjust=True, progress=False,
             multi_level_column=False, timeout=_DOWNLOAD_TIMEOUT,
@@ -94,7 +104,7 @@ def get_bars_bulk(tickers: list[str], days: int = 200) -> dict[str, pd.DataFrame
     if not tickers:
         return {}
     try:
-        start = date.today() - timedelta(days=days + 10)
+        start = start_date_for_trading_days(days)
         raw = _download_with_deadline(
             tickers,
             start=start.isoformat(),

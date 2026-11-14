@@ -21,6 +21,28 @@ _BATCH_SIZE = 50
 _BARS_DAYS = 220  # enough for SMA-200 + buffer
 
 
+def load_recent_bars(db: Session, ticker: str, columns: list[str], n: int = _BARS_DAYS):
+    """Return the *most recent* ``n`` price bars for ``ticker`` as a DataFrame,
+    sorted ascending by bar_date.
+
+    Ordering ascending and then limiting would return the *oldest* n bars once
+    more than n are stored, so query newest-first, limit, then re-sort.
+    """
+    import pandas as pd
+
+    cols = [getattr(PriceBar, c) for c in columns]
+    rows = db.execute(
+        select(*cols)
+        .where(PriceBar.ticker == ticker)
+        .order_by(PriceBar.bar_date.desc())
+        .limit(n)
+    ).fetchall()
+    df = pd.DataFrame(rows, columns=columns)
+    if df.empty:
+        return df
+    return df.sort_values("bar_date").reset_index(drop=True)
+
+
 class ScanRunner:
     def __init__(self, db: Session) -> None:
         self.db = db
@@ -155,24 +177,16 @@ class ScanRunner:
             self._bump_progress(run_id, min(i + len(batch), len(tickers)))
 
     def _load_sector_bars(self) -> dict[str, object]:
-        """Load price bar DataFrames for all sector ETFs from DB."""
-        import pandas as pd
-
+        """Load the most recent price bars for all sector ETFs from DB."""
         etf_tickers = list(set(SECTOR_ETF_MAP.values()))
         result: dict[str, object] = {}
         for etf in etf_tickers:
-            rows = self.db.execute(
-                select(PriceBar.bar_date, PriceBar.close)
-                .where(PriceBar.ticker == etf)
-                .order_by(PriceBar.bar_date)
-            ).fetchall()
-            if rows:
-                result[etf] = pd.DataFrame(rows, columns=["bar_date", "close"])
+            df = load_recent_bars(self.db, etf, ["bar_date", "close"])
+            if not df.empty:
+                result[etf] = df
         return result
 
     def _score_all(self, tickers: list[str], sector_bars: dict, run_id: int) -> list[ScanResult]:
-        import pandas as pd
-
         scan_date = date.today()
         # build ticker→sector map
         sector_map: dict[str, str] = dict(
@@ -181,24 +195,12 @@ class ScanRunner:
 
         results: list[ScanResult] = []
         for idx, ticker in enumerate(tickers, start=1):
-            rows = self.db.execute(
-                select(
-                    PriceBar.bar_date,
-                    PriceBar.open,
-                    PriceBar.high,
-                    PriceBar.low,
-                    PriceBar.close,
-                    PriceBar.volume,
-                )
-                .where(PriceBar.ticker == ticker)
-                .order_by(PriceBar.bar_date)
-                .limit(_BARS_DAYS)
-            ).fetchall()
-
-            if not rows:
+            bars_df = load_recent_bars(
+                self.db, ticker, ["bar_date", "open", "high", "low", "close", "volume"]
+            )
+            if bars_df.empty:
                 continue
 
-            bars_df = pd.DataFrame(rows, columns=["bar_date", "open", "high", "low", "close", "volume"])
             sector = sector_map.get(ticker)
             etf = SECTOR_ETF_MAP.get(sector) if sector else None
             sector_df = sector_bars.get(etf) if etf else None
