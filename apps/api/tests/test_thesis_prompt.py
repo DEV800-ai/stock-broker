@@ -40,3 +40,18 @@ def test_prompt_handles_missing_stats():
     assert "SMA-200 N/A" in p
     assert "6-month N/A" in p
     assert "Volume trend (20-day avg vs 60-day avg): N/A" in p
+
+
+def test_elliott_wave_removed_from_schema_and_prompts():
+    from broker.ai import thesis_agent, thesis_translation
+    from broker.models.thesis import StockThesis
+
+    assert "elliott" not in thesis_agent._SYSTEM_PROMPT.lower()
+    assert "elliott" not in thesis_translation._SYSTEM_PROMPT.lower()
+    assert "elliott_wave_context" not in thesis_agent.ThesisResponse.model_fields
+    assert "elliott_wave_context" not in StockThesis.__table__.columns
+    # Old cached LLM output that still carries the key must still parse.
+    parsed = thesis_agent.ThesisResponse.model_validate(
+        {"why_interesting": "x", "risk_factors": "y", "elliott_wave_context": "wave 3"}
+    )
+    assert not hasattr(parsed, "elliott_wave_context")

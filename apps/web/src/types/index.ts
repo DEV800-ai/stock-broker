@@ -80,7 +80,6 @@ export interface StockThesis {
   risk_factors: string;
   sector_context: string | null;
   peer_comparison: string | null;
-  elliott_wave_context: string | null;
   news_summary: string | null;
   catalysts: string | null;
   confidence: ThesisConfidence | null;
@@ -94,7 +93,6 @@ export interface ThesisTranslation {
   risk_factors: string;
   sector_context: string | null;
   peer_comparison: string | null;
-  elliott_wave_context: string | null;
   news_summary: string | null;
   catalysts: string | null;
 }
