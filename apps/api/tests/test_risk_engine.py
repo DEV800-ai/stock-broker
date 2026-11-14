@@ -18,6 +18,7 @@ def make_ctx(**overrides) -> RiskContext:
             estimated_value=496.0,
             sector="Aerospace",
             thesis_id=1,
+            stop_price=11.50,
         ),
     )
     portfolio = overrides.pop(
@@ -97,7 +98,7 @@ def test_unknown_liquidity_needs_manual_review():
 def test_oversized_position_needs_smaller_size():
     proposal = TradeProposal(
         ticker="RKLB", action="BUY", order_type="LIMIT", shares=1000,
-        limit_price=12.4, estimated_value=12_400.0, sector="Aerospace",
+        limit_price=12.4, estimated_value=12_400.0, sector="Aerospace", stop_price=11.5,
     )
     result = evaluate(make_ctx(proposal=proposal))
     assert result.verdict == "needs_smaller_size"
@@ -107,7 +108,7 @@ def test_oversized_position_needs_smaller_size():
 def test_existing_position_counts_toward_max_position_size():
     proposal = TradeProposal(
         ticker="RKLB", action="BUY", order_type="LIMIT", shares=10,
-        limit_price=12.4, estimated_value=124.0, sector="Aerospace",
+        limit_price=12.4, estimated_value=124.0, sector="Aerospace", stop_price=11.5,
     )
     portfolio = PortfolioState(
         net_liquidation=25_000.0, cash=10_000.0,
@@ -121,7 +122,7 @@ def test_existing_position_counts_toward_max_position_size():
 def test_oversized_sector_exposure_needs_smaller_size():
     proposal = TradeProposal(
         ticker="RKLB", action="BUY", order_type="LIMIT", shares=10,
-        limit_price=12.4, estimated_value=124.0, sector="Aerospace",
+        limit_price=12.4, estimated_value=124.0, sector="Aerospace", stop_price=11.5,
     )
     portfolio = PortfolioState(
         net_liquidation=25_000.0, cash=10_000.0,
@@ -141,7 +142,7 @@ def test_daily_loss_halt_blocks_new_buys():
 def test_daily_loss_halt_does_not_block_sells():
     proposal = TradeProposal(
         ticker="RKLB", action="SELL", order_type="LIMIT", shares=10,
-        limit_price=12.4, estimated_value=124.0, sector="Aerospace",
+        limit_price=12.4, estimated_value=124.0, sector="Aerospace", stop_price=11.5,
     )
     portfolio = PortfolioState(net_liquidation=25_000.0, cash=10_000.0, realized_pnl_today=-5_000.0)
     result = evaluate(make_ctx(proposal=proposal, portfolio=portfolio))
@@ -203,7 +204,7 @@ def test_paper_only_does_not_override_a_hard_block():
 def test_block_takes_precedence_over_needs_smaller_size():
     proposal = TradeProposal(
         ticker="RKLB", action="BUY", order_type="LIMIT", shares=1000,
-        limit_price=12.4, estimated_value=12_400.0, sector="Aerospace", is_option=True,
+        limit_price=12.4, estimated_value=12_400.0, sector="Aerospace", stop_price=11.5, is_option=True,
     )
     result = evaluate(make_ctx(proposal=proposal))
     assert result.verdict == "blocked"
@@ -212,8 +213,56 @@ def test_block_takes_precedence_over_needs_smaller_size():
 def test_sell_action_skips_sizing_and_loss_checks():
     proposal = TradeProposal(
         ticker="RKLB", action="SELL", order_type="LIMIT", shares=1000,
-        limit_price=12.4, estimated_value=12_400.0, sector="Aerospace",
+        limit_price=12.4, estimated_value=12_400.0, sector="Aerospace", stop_price=11.5,
     )
     portfolio = PortfolioState(net_liquidation=25_000.0, cash=10_000.0, realized_pnl_today=-2_000.0)
     result = evaluate(make_ctx(proposal=proposal, portfolio=portfolio))
     assert result.verdict == "approved"
+
+
+# --- market regime ------------------------------------------------------------
+
+from broker.risk.rules import check_regime_position_size  # noqa: E402
+
+
+def _buy(value: float) -> TradeProposal:
+    return TradeProposal(
+        ticker="RKLB", action="BUY", order_type="LIMIT", shares=1,
+        limit_price=value, estimated_value=value, sector="Aerospace", thesis_id=1,
+        stop_price=value * 0.9,
+    )
+
+
+def test_regime_rule_passes_outside_risk_off():
+    # 4% of 25k NLV: within the normal 5% cap.
+    for regime in (None, "unknown", "risk_on", "neutral"):
+        ctx = make_ctx(proposal=_buy(1_000.0), market_regime=regime)
+        assert check_regime_position_size(ctx).passed
+        assert evaluate(ctx).verdict == "approved"
+
+
+def test_risk_off_halves_max_position_size():
+    # 4% of NLV > 5% * 0.5 = 2.5% → needs_smaller_size
+    ctx = make_ctx(proposal=_buy(1_000.0), market_regime="risk_off")
+    result = check_regime_position_size(ctx)
+    assert not result.passed
+    assert result.severity == "needs_smaller_size"
+    assert "risk_off" in result.reason
+    assert evaluate(ctx).verdict == "needs_smaller_size"
+
+
+def test_risk_off_allows_positions_within_reduced_cap():
+    ctx = make_ctx(proposal=_buy(600.0), market_regime="risk_off")  # 2.4% < 2.5%
+    assert check_regime_position_size(ctx).passed
+    assert evaluate(ctx).verdict == "approved"
+
+
+def test_risk_off_counts_existing_position_and_custom_multiplier():
+    portfolio = PortfolioState(net_liquidation=25_000.0, cash=10_000.0, position_values={"RKLB": 500.0})
+    ctx = make_ctx(proposal=_buy(200.0), portfolio=portfolio, market_regime="risk_off")
+    assert not check_regime_position_size(ctx).passed  # (500 + 200) / 25k = 2.8% > 2.5%
+    loose = make_ctx(
+        proposal=_buy(200.0), portfolio=portfolio, market_regime="risk_off",
+        policy=RiskPolicyParams(risk_off_position_size_multiplier=0.8),
+    )
+    assert check_regime_position_size(loose).passed  # 2.8% < 4%

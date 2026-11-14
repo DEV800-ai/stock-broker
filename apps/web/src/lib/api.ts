@@ -4,6 +4,7 @@ import type {
   HealthStatus,
   ManualExecutionOutcome,
   ManualExecutionResult,
+  MarketRegime,
   OrderPreview,
   OrderPreviewDetail,
   PaperTrade,
@@ -54,6 +55,8 @@ export const api = {
 
   deleteScanRun: (runId: number) =>
     apiFetch<void>(`/api/v1/scanner/runs/${runId}`, { method: "DELETE" }),
+
+  marketRegime: () => apiFetch<MarketRegime>("/api/v1/scanner/regime"),
 
   scanResults: (params?: { date?: string; min_score?: number; limit?: number }) => {
     const q = new URLSearchParams();
@@ -139,6 +142,7 @@ export const api = {
     shares?: number;
     amount_usd?: number;
     limit_price?: number;
+    stop_price?: number;
     order_type?: string;
     time_in_force?: string;
     execution_mode?: string;

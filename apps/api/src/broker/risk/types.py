@@ -21,6 +21,7 @@ class TradeProposal:
     uses_margin: bool = False
     is_short: bool = False
     is_option: bool = False
+    stop_price: float | None = None
 
 
 @dataclass
@@ -46,6 +47,8 @@ class RiskPolicyParams:
     allow_trade_before_earnings: bool = False
     cooldown_rejections_threshold: int = 2
     cooldown_losses_threshold: int = 2
+    # Applied to max_position_pct while the market regime is risk_off.
+    risk_off_position_size_multiplier: float = 0.5
 
 
 @dataclass
@@ -62,6 +65,7 @@ class RiskContext:
     avg_daily_volume: float | None = None
     recent_rejections: int = 0
     recent_losses: int = 0
+    market_regime: str | None = None  # risk_on|neutral|risk_off|unknown (ranking/regime.py)
 
 
 @dataclass

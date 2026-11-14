@@ -24,6 +24,7 @@ interface CreateForm {
   reason: string;
   shares: string;
   limit_price: string;
+  stop_price: string;
   order_type: string;
   time_in_force: string;
   execution_mode: "paper" | "manual_tradingview";
@@ -35,6 +36,7 @@ const EMPTY_FORM: CreateForm = {
   reason: "",
   shares: "1",
   limit_price: "",
+  stop_price: "",
   order_type: "LIMIT",
   time_in_force: "DAY",
   execution_mode: "paper",
@@ -182,6 +184,7 @@ export default function OrdersPage() {
         reason: form.reason,
         shares: form.shares ? parseInt(form.shares) : undefined,
         limit_price: form.limit_price ? parseFloat(form.limit_price) : undefined,
+        stop_price: form.action === "BUY" && form.stop_price ? parseFloat(form.stop_price) : undefined,
         order_type: form.order_type,
         time_in_force: form.time_in_force,
         execution_mode: form.execution_mode,
@@ -302,6 +305,12 @@ export default function OrdersPage() {
                   onChange={(e) => setForm((f) => ({ ...f, limit_price: e.target.value }))} />
               </Field>
             </div>
+            {form.action === "BUY" && (
+              <Field label="Stop price ($) (optional, defaults to entry − 2×ATR(14))">
+                <input type="number" step="0.01" className={inputCls} value={form.stop_price}
+                  onChange={(e) => setForm((f) => ({ ...f, stop_price: e.target.value }))} />
+              </Field>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <Field label="Order type">
                 <input className={inputCls} value={form.order_type}
@@ -452,6 +461,7 @@ function OrderRow({
         <span>{p.time_in_force}</span>
         <span className="text-muted-foreground/70">{p.execution_mode === "manual_tradingview" ? "manual · TradingView" : "paper"}</span>
       </div>
+      <AtrContext p={p} />
 
       <div className="flex gap-2 ml-auto">
         <Button size="sm" variant="outline" onClick={onToggleChart}>{chartOpen ? "Hide Chart" : "Chart"}</Button>
@@ -461,6 +471,23 @@ function OrderRow({
         <Button size="sm" disabled={busy} onClick={onApprove}>Approve</Button>
         <Button size="sm" variant="outline" disabled={busy} onClick={onReject}>Reject</Button>
       </div>
+    </div>
+  );
+}
+
+/** Descriptive ATR-based numbers for a preview: context, not recommendations. */
+function AtrContext({ p }: { p: OrderPreview }) {
+  if (p.action !== "BUY" || (p.stop_price == null && p.atr_14 == null)) return null;
+  const money = (v: number | null) => (v != null ? `$${v.toFixed(2)}` : "—");
+  return (
+    <div
+      className="basis-full flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground font-mono"
+      title="Volatility-based reference levels: stop = entry − 2×ATR(14), reference = entry + 3×ATR(14); risk-based size = shares at which reaching the stop costs 1% of paper equity, capped by the max-position rule. Descriptive only."
+    >
+      <span>ATR(14) {money(p.atr_14)}</span>
+      <span>Stop {money(p.stop_price)}</span>
+      <span>Reference {money(p.reference_target)}</span>
+      {p.risk_sized_shares != null && <span>1%-risk size {p.risk_sized_shares} sh</span>}
     </div>
   );
 }

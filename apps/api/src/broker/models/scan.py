@@ -45,6 +45,9 @@ class ScanResult(Base):
     # Raw market data
     price: Mapped[float | None] = mapped_column(Double)
     volume_ratio: Mapped[float | None] = mapped_column(Double)
+    volume_trend_ratio: Mapped[float | None] = mapped_column(Double)  # 20d / 60d avg volume
+    rs_excess_3m: Mapped[float | None] = mapped_column(Double)  # 63-bar excess vs sector ETF
+    rs_excess_6m: Mapped[float | None] = mapped_column(Double)  # 126-bar excess vs sector ETF
     pct_change_1d: Mapped[float | None] = mapped_column(Double)
     pct_change_5d: Mapped[float | None] = mapped_column(Double)
     pct_change_20d: Mapped[float | None] = mapped_column(Double)
@@ -52,6 +55,7 @@ class ScanResult(Base):
     sma50: Mapped[float | None] = mapped_column(Double)
     sma200: Mapped[float | None] = mapped_column(Double)
     rsi_14: Mapped[float | None] = mapped_column(Double)
+    atr_14: Mapped[float | None] = mapped_column(Double)  # Wilder ATR(14)
     macd: Mapped[float | None] = mapped_column(Double)
     macd_signal: Mapped[float | None] = mapped_column(Double)
     macd_histogram: Mapped[float | None] = mapped_column(Double)

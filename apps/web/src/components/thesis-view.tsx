@@ -76,9 +76,6 @@ export function ThesisView({ thesis }: { thesis: StockThesis }) {
             {view.sector_context && (
               <Section title={language === "he" ? "הקשר סקטוריאלי" : "Sector Context"} content={view.sector_context} />
             )}
-            {view.elliott_wave_context && (
-              <Section title={language === "he" ? "הקשר גלי אליוט" : "Elliott Wave Context"} content={view.elliott_wave_context} />
-            )}
             {view.news_summary && (
               <Section title={language === "he" ? "סיכום חדשות" : "News Summary"} content={view.news_summary} />
             )}

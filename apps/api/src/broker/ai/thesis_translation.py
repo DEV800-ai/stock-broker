@@ -18,7 +18,6 @@ class ThesisTranslation(BaseModel):
     risk_factors: str
     sector_context: str | None = None
     peer_comparison: str | None = None
-    elliott_wave_context: str | None = None
     news_summary: str | None = None
     catalysts: str | None = None
 
@@ -39,7 +38,6 @@ Respond ONLY with valid JSON matching this schema:
   "risk_factors": "<Hebrew translation>",
   "sector_context": "<Hebrew translation or null>",
   "peer_comparison": "<Hebrew translation or null>",
-  "elliott_wave_context": "<Hebrew translation or null>",
   "news_summary": "<Hebrew translation or null>",
   "catalysts": "<Hebrew translation or null>"
 }
@@ -51,7 +49,6 @@ class _TranslationPayload(BaseModel):
     risk_factors: str
     sector_context: str | None = None
     peer_comparison: str | None = None
-    elliott_wave_context: str | None = None
     news_summary: str | None = None
     catalysts: str | None = None
 
@@ -68,7 +65,6 @@ def _source_payload(thesis: StockThesis) -> dict:
         "risk_factors": thesis.risk_factors,
         "sector_context": thesis.sector_context,
         "peer_comparison": thesis.peer_comparison,
-        "elliott_wave_context": thesis.elliott_wave_context,
         "news_summary": thesis.news_summary,
         "catalysts": thesis.catalysts,
     }

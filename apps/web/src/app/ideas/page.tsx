@@ -17,7 +17,7 @@ import { ThesisView } from "@/components/thesis-view";
 import { TradingViewWidget } from "@/components/tradingview-widget";
 import { api } from "@/lib/api";
 import { generateAndPollThesis } from "@/lib/thesis";
-import type { ScanResult, StockThesis, WatchlistStatus } from "@/types";
+import type { MarketRegime, MarketRegimeLabel, ScanResult, StockThesis, WatchlistStatus } from "@/types";
 
 const TOP_N = 10;
 
@@ -39,8 +39,11 @@ export default function IdeasPage() {
   const [generating, setGenerating] = useState(false);
   const [thesisError, setThesisError] = useState<string | null>(null);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [regime, setRegime] = useState<MarketRegime | null>(null);
 
   function loadTop() {
+    // 404 until the first scan records a regime — just hide the badge.
+    api.marketRegime().then(setRegime).catch(() => setRegime(null));
     api.scanResults({ limit: TOP_N }).then(setResults).catch(console.error);
     api.watchlist({ limit: TOP_N })
       .then((entries) => {
@@ -135,7 +138,10 @@ export default function IdeasPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Top Ideas</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-semibold">Top Ideas</h1>
+          {regime && <RegimeBadge regime={regime} />}
+        </div>
         <Button size="sm" onClick={runScan} disabled={scanning}>
           {scanning ? "Scanning…" : "Run Scan"}
         </Button>
@@ -217,6 +223,39 @@ const STATUS_BADGE: Record<WatchlistStatus, BadgeVariant> = {
   paper: "success",
   avoid: "destructive",
 };
+
+const REGIME_LABEL: Record<MarketRegimeLabel, string> = {
+  risk_on: "Market: risk-on",
+  neutral: "Market: neutral",
+  risk_off: "Market: risk-off",
+  unknown: "Market: unknown",
+};
+
+const REGIME_BADGE: Record<MarketRegimeLabel, VariantProps<typeof badgeVariants>["variant"]> = {
+  risk_on: "success",
+  neutral: "secondary",
+  risk_off: "warning",
+  unknown: "outline",
+};
+
+function RegimeBadge({ regime }: { regime: MarketRegime }) {
+  const fmt = (v: number | null) => (v != null ? v.toFixed(2) : "—");
+  const title = [
+    `SPY ${fmt(regime.spy_close)} vs SMA-200 ${fmt(regime.spy_sma200)}`,
+    `SMA-50 20-day slope ${regime.spy_sma50_slope_20d != null ? (regime.spy_sma50_slope_20d * 100).toFixed(1) + "%" : "—"}`,
+    regime.vix != null ? `VIX ${regime.vix.toFixed(1)}` : null,
+    `Thesis threshold ${regime.effective_thesis_min_score.toFixed(2)}`,
+    `As of ${new Date(regime.as_of).toLocaleString()}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return (
+    <Badge variant={REGIME_BADGE[regime.regime]} className="text-xs font-normal" title={title}>
+      {REGIME_LABEL[regime.regime]}
+      {regime.vix != null && <span className="font-mono opacity-80">· VIX {regime.vix.toFixed(1)}</span>}
+    </Badge>
+  );
+}
 
 function IdeaCard({
   rank,

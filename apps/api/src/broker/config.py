@@ -28,12 +28,25 @@ class Settings(BaseSettings):
     sec_edgar_user_agent: str = ""
 
     scanner_min_score: float = 0.30
+    # Composite weights (see ranking/scorer.py). Tune from the
+    # /reports/signal-outcomes IC results; the active set is recorded on each
+    # ScanRun.params_json["weights_version"].
+    composite_weight_momentum: float = 0.40
+    composite_weight_rs: float = 0.40
+    composite_weight_volume: float = 0.20
     thesis_min_score: float = 0.50
+    # Effective thesis threshold while the market regime is risk_off
+    # (ranking/regime.py): max(thesis_min_score, thesis_min_score_risk_off).
+    thesis_min_score_risk_off: float = 0.65
     thesis_recheck_max_age_hours: int = 24
     # Holding horizon the thesis agent is told to calibrate its reasoning and
     # confidence to — this app is paper-trading/swing-oriented, not day-trading.
     thesis_target_horizon: str = "1-3 months"
     scanner_universe_size: int = 500
+    # Pre-score universe filters (scanner/runner.py::universe_filter_reason):
+    # skip tickers below min_price or below min 20-day avg dollar volume.
+    min_price: float = 5.0
+    min_dollar_volume: float = 10_000_000.0
     # A scan can legitimately run 60-90+ min for the full universe. Only let
     # delete_scan_run clear a still-"running" run once it's been running
     # longer than this — otherwise it races the background scan task and
@@ -41,6 +54,12 @@ class Settings(BaseSettings):
     scan_stale_after_minutes: int = 120
 
     paper_account_equity: float = 100_000.0
+    # Order-preview context (orders/sizing.py): stop = entry - atr_stop_multiple*ATR,
+    # reference target = entry + atr_target_multiple*ATR, risk-based size =
+    # equity * risk_per_trade / (entry - stop), capped by the max-position rule.
+    risk_per_trade: float = 0.01
+    atr_stop_multiple: float = 2.0
+    atr_target_multiple: float = 3.0
     risk_cooldown_days: int = 14
     order_preview_ttl_minutes: int = 5
 

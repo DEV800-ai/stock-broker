@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from broker.audit.service import log as audit_log
 from broker.config import settings
 from broker.data.finnhub import fetch_next_earnings_date
+from broker.data.pricing import latest_price
 from broker.execution.base import BrokerAdapter, FillResult
 from broker.execution.paper_adapter import PaperAdapter
 from broker.models.order import OrderPreview
@@ -25,6 +26,10 @@ from broker.models.price_bar import PriceBar
 from broker.models.risk import AgentControl, RiskEvaluationRecord, RiskPolicy
 from broker.models.thesis import StockThesis
 from broker.models.universe import StockUniverse
+from broker.models.scan import ScanResult
+from broker.orders.sizing import atr_stop_and_target, risk_sized_shares
+from broker.ranking.regime import latest_regime_label
+from broker.ranking.scorer import _atr
 from broker.risk.engine import evaluate as evaluate_risk
 from broker.risk.types import PortfolioState, RiskContext, RiskPolicyParams, TradeProposal
 
@@ -75,6 +80,40 @@ def _avg_daily_volume(db: Session, ticker: str, days: int = 20) -> float | None:
     ).all()
     volumes = [b.volume for b in bars if b.volume]
     return (sum(volumes) / len(volumes)) if volumes else None
+
+
+def latest_atr(db: Session, ticker: str) -> float | None:
+    """ATR(14) from the latest scan of ``ticker``; falls back to computing it
+    from stored price bars (e.g. tickers scanned before ATR was stored)."""
+    stored = db.scalar(
+        select(ScanResult.atr_14)
+        .where(ScanResult.ticker == ticker)
+        .where(ScanResult.atr_14.is_not(None))
+        .order_by(desc(ScanResult.scan_date), desc(ScanResult.id))
+        .limit(1)
+    )
+    if stored is not None:
+        return float(stored)
+    import pandas as pd
+
+    bars = db.scalars(
+        select(PriceBar).where(PriceBar.ticker == ticker).order_by(desc(PriceBar.bar_date)).limit(60)
+    ).all()
+    if not bars:
+        return None
+    df = pd.DataFrame(
+        [{"high": b.high, "low": b.low, "close": b.close} for b in reversed(bars)]
+    )
+    return _atr(df)
+
+
+def max_position_value(ctx: RiskContext) -> float:
+    """Dollar room left under the max-position rule (reduced in risk_off)."""
+    pct = ctx.policy.max_position_pct
+    if ctx.market_regime == "risk_off":
+        pct *= ctx.policy.risk_off_position_size_multiplier
+    existing = ctx.portfolio.position_values.get(ctx.proposal.ticker, 0.0)
+    return pct * ctx.portfolio.net_liquidation - existing
 
 
 def _sector(db: Session, ticker: str) -> str | None:
@@ -189,6 +228,7 @@ def build_risk_context(
     limit_price: float,
     thesis_id: int | None,
     order_type: str = "LIMIT",
+    stop_price: float | None = None,
 ) -> RiskContext:
     has_thesis = bool(thesis_id and db.get(StockThesis, thesis_id))
     proposal = TradeProposal(
@@ -200,6 +240,7 @@ def build_risk_context(
         estimated_value=shares * limit_price,
         sector=_sector(db, ticker),
         thesis_id=thesis_id,
+        stop_price=stop_price,
     )
     control = _agent_control(db)
     return RiskContext(
@@ -215,6 +256,7 @@ def build_risk_context(
         avg_daily_volume=_avg_daily_volume(db, ticker),
         recent_rejections=_recent_rejections(db, ticker),
         recent_losses=_recent_losses(db, ticker),
+        market_regime=latest_regime_label(db),
     )
 
 
@@ -252,6 +294,7 @@ def create_preview(
     time_in_force: str = "DAY",
     execution_mode: str = "paper",
     actor: str = "system",
+    stop_price: float | None = None,
 ) -> OrderPreview:
     ticker = ticker.upper()
     if action not in ("BUY", "SELL"):
@@ -279,8 +322,30 @@ def create_preview(
                 f"amount_usd {amount_usd} does not buy at least 1 share at limit_price {limit_price}"
             )
 
-    ctx = build_risk_context(db, ticker, action, shares, limit_price, thesis_id, order_type=order_type)
+    if stop_price is not None and (action != "BUY" or stop_price <= 0 or stop_price >= limit_price):
+        raise InvalidOrderRequest("stop_price is only for BUY previews and must be between 0 and limit_price")
+
+    # Descriptive ATR context: stop = entry - k*ATR (unless the human gave
+    # one), reference target = entry + m*ATR. Not a recommendation.
+    atr = latest_atr(db, ticker) if action == "BUY" else None
+    levels = atr_stop_and_target(
+        limit_price, atr, settings.atr_stop_multiple, settings.atr_target_multiple
+    )
+    if stop_price is None and levels is not None:
+        stop_price = levels[0]
+
+    ctx = build_risk_context(
+        db, ticker, action, shares, limit_price, thesis_id, order_type=order_type, stop_price=stop_price
+    )
     evaluation = evaluate_risk(ctx)
+    sized = (
+        risk_sized_shares(
+            limit_price, stop_price, ctx.portfolio.net_liquidation, settings.risk_per_trade,
+            max_position_value(ctx),
+        )
+        if action == "BUY" and stop_price is not None
+        else None
+    )
 
     thesis = db.get(StockThesis, thesis_id) if thesis_id else None
 
@@ -296,6 +361,10 @@ def create_preview(
         bull_case=thesis.why_interesting if thesis else None,
         bear_case=thesis.risk_factors if thesis else None,
         portfolio_impact=_describe_portfolio_impact(ctx),
+        atr_14=atr,
+        stop_price=stop_price,
+        reference_target=levels[1] if levels else None,
+        risk_sized_shares=sized,
         risk_status=evaluation.verdict,
         approval_required=True,
         execution_mode=execution_mode,
@@ -358,7 +427,7 @@ def approve_preview(db: Session, preview_id: int, approved_by: str = "human") ->
     # still-fresh (within-TTL) preview can't slip past a rule that would now block it.
     reeval_ctx = build_risk_context(
         db, preview.ticker, preview.action, preview.shares, preview.limit_price, preview.thesis_id,
-        order_type=preview.order_type,
+        order_type=preview.order_type, stop_price=preview.stop_price,
     )
     reevaluation = evaluate_risk(reeval_ctx)
     db.add(RiskEvaluationRecord(

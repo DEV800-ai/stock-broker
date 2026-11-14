@@ -13,12 +13,68 @@ from broker.models.price_bar import PriceBar
 from broker.models.scan import ScanResult, ScanRun
 from broker.models.universe import StockUniverse
 from broker.models.watchlist import WatchlistEntry
-from broker.ranking.scorer import compute_scores
+from broker.ranking.regime import compute_regime
+from broker.ranking.scorer import composite_weights, compute_scores, weights_version
 
 logger = logging.getLogger(__name__)
 
 _BATCH_SIZE = 50
 _BARS_DAYS = 220  # enough for SMA-200 + buffer
+# Relative-strength benchmark for tickers with no mapped sector ETF
+# (ETFs themselves, unknown sectors).
+_FALLBACK_BENCHMARK = "SPY"
+
+
+def load_recent_bars(db: Session, ticker: str, columns: list[str], n: int = _BARS_DAYS):
+    """Return the *most recent* ``n`` price bars for ``ticker`` as a DataFrame,
+    sorted ascending by bar_date.
+
+    Ordering ascending and then limiting would return the *oldest* n bars once
+    more than n are stored, so query newest-first, limit, then re-sort.
+    """
+    import pandas as pd
+
+    cols = [getattr(PriceBar, c) for c in columns]
+    rows = db.execute(
+        select(*cols)
+        .where(PriceBar.ticker == ticker)
+        .order_by(PriceBar.bar_date.desc())
+        .limit(n)
+    ).fetchall()
+    df = pd.DataFrame(rows, columns=columns)
+    if df.empty:
+        return df
+    return df.sort_values("bar_date").reset_index(drop=True)
+
+
+def _latest_vix() -> float | None:
+    """Latest ^VIX close via yfinance, or None. Display-only context."""
+    try:
+        from broker.data.yfinance_data import get_bars
+
+        df = get_bars("^VIX", days=5)
+        return float(df["close"].iloc[-1]) if not df.empty else None
+    except Exception:  # never let an optional stat fail the scan
+        logger.debug("VIX fetch failed", exc_info=True)
+        return None
+
+
+def universe_filter_reason(bars, min_price: float, min_dollar_volume: float) -> str | None:
+    """Why a ticker should be skipped before scoring, or None if it passes.
+
+    bars: ascending DataFrame with close and volume. Price is the latest close;
+    dollar volume is the mean of close x volume over the last 20 bars.
+    """
+    if bars.empty:
+        return "no_bars"
+    price = float(bars["close"].iloc[-1])
+    if price < min_price:
+        return "min_price"
+    recent = bars.tail(20)
+    dollar_volume = float((recent["close"].astype(float) * recent["volume"].fillna(0).astype(float)).mean())
+    if dollar_volume < min_dollar_volume:
+        return "min_dollar_volume"
+    return None
 
 
 class ScanRunner:
@@ -26,7 +82,15 @@ class ScanRunner:
         self.db = db
 
     def run_full_scan(self) -> None:
-        run = ScanRun(started_at=datetime.utcnow(), status="running")
+        self.weights = composite_weights()
+        run = ScanRun(
+            started_at=datetime.utcnow(),
+            status="running",
+            params_json={
+                "weights_version": weights_version(self.weights),
+                "weights": self.weights,
+            },
+        )
         self.db.add(run)
         self.db.commit()
         self.db.refresh(run)
@@ -54,6 +118,7 @@ class ScanRunner:
             self.db.commit()
 
             sector_bars_cache = self._load_sector_bars()
+            self._record_regime(run_id, sector_bars_cache.get(_FALLBACK_BENCHMARK))
             results = self._score_all(tickers, sector_bars_cache, run_id)
 
             flagged = [r for r in results if r.composite_score is not None and r.composite_score >= settings.scanner_min_score]
@@ -155,24 +220,40 @@ class ScanRunner:
             self._bump_progress(run_id, min(i + len(batch), len(tickers)))
 
     def _load_sector_bars(self) -> dict[str, object]:
-        """Load price bar DataFrames for all sector ETFs from DB."""
-        import pandas as pd
-
-        etf_tickers = list(set(SECTOR_ETF_MAP.values()))
+        """Load the most recent price bars for all sector ETFs from DB."""
+        etf_tickers = list(set(SECTOR_ETF_MAP.values()) | {_FALLBACK_BENCHMARK})
         result: dict[str, object] = {}
         for etf in etf_tickers:
-            rows = self.db.execute(
-                select(PriceBar.bar_date, PriceBar.close)
-                .where(PriceBar.ticker == etf)
-                .order_by(PriceBar.bar_date)
-            ).fetchall()
-            if rows:
-                result[etf] = pd.DataFrame(rows, columns=["bar_date", "close"])
+            df = load_recent_bars(self.db, etf, ["bar_date", "close"])
+            if not df.empty:
+                result[etf] = df
         return result
 
-    def _score_all(self, tickers: list[str], sector_bars: dict, run_id: int) -> list[ScanResult]:
-        import pandas as pd
+    def _record_regime(self, run_id: int, spy_bars) -> None:
+        closes = spy_bars["close"] if spy_bars is not None else []
+        regime = compute_regime(closes)
+        regime["vix"] = _latest_vix()  # displayed stat only, never used in logic
+        run = self.db.get(ScanRun, run_id)
+        # Reassign (not mutate) so SQLAlchemy sees the JSONB change.
+        run.params_json = {**(run.params_json or {}), "regime": regime}
+        self.db.commit()
+        logger.info("Market regime: %s", regime["regime"])
 
+    def _record_filtered(self, run_id: int, filtered: dict[str, int]) -> None:
+        run = self.db.get(ScanRun, run_id)
+        run.params_json = {
+            **(run.params_json or {}),
+            "universe_filter": {
+                "min_price": settings.min_price,
+                "min_dollar_volume": settings.min_dollar_volume,
+                "filtered_out": sum(filtered.values()),
+                "filtered_by_reason": filtered,
+            },
+        }
+        self.db.commit()
+        logger.info("Universe filter skipped %d tickers: %s", sum(filtered.values()), filtered)
+
+    def _score_all(self, tickers: list[str], sector_bars: dict, run_id: int) -> list[ScanResult]:
         scan_date = date.today()
         # build ticker→sector map
         sector_map: dict[str, str] = dict(
@@ -180,30 +261,24 @@ class ScanRunner:
         )
 
         results: list[ScanResult] = []
+        filtered: dict[str, int] = {"min_price": 0, "min_dollar_volume": 0}
         for idx, ticker in enumerate(tickers, start=1):
-            rows = self.db.execute(
-                select(
-                    PriceBar.bar_date,
-                    PriceBar.open,
-                    PriceBar.high,
-                    PriceBar.low,
-                    PriceBar.close,
-                    PriceBar.volume,
-                )
-                .where(PriceBar.ticker == ticker)
-                .order_by(PriceBar.bar_date)
-                .limit(_BARS_DAYS)
-            ).fetchall()
-
-            if not rows:
+            bars_df = load_recent_bars(
+                self.db, ticker, ["bar_date", "open", "high", "low", "close", "volume"]
+            )
+            if bars_df.empty:
                 continue
 
-            bars_df = pd.DataFrame(rows, columns=["bar_date", "open", "high", "low", "close", "volume"])
-            sector = sector_map.get(ticker)
-            etf = SECTOR_ETF_MAP.get(sector) if sector else None
-            sector_df = sector_bars.get(etf) if etf else None
+            reason = universe_filter_reason(bars_df, settings.min_price, settings.min_dollar_volume)
+            if reason is not None:
+                filtered[reason] += 1
+                continue
 
-            scores = compute_scores(bars_df, sector_df)
+            sector = sector_map.get(ticker)
+            etf = (SECTOR_ETF_MAP.get(sector) if sector else None) or _FALLBACK_BENCHMARK
+            sector_df = sector_bars.get(etf)
+
+            scores = compute_scores(bars_df, sector_df, weights=getattr(self, "weights", None))
             if not scores:
                 continue
 
@@ -222,6 +297,7 @@ class ScanRunner:
 
         self.db.commit()
         self._bump_progress(run_id, len(tickers))
+        self._record_filtered(run_id, filtered)
         # refresh to get IDs
         for r in results:
             self.db.refresh(r)

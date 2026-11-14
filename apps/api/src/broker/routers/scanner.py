@@ -28,6 +28,7 @@ class ScanRunOut(BaseModel):
     phase: str | None
     total_tickers: int | None
     tickers_processed: int | None
+    params_json: dict | None = None
 
     model_config = {"from_attributes": True}
 
@@ -43,12 +44,38 @@ class ScanResultOut(BaseModel):
     gap_score: float | None
     price: float | None
     volume_ratio: float | None
+    volume_trend_ratio: float | None = None
+    rs_excess_3m: float | None = None
+    rs_excess_6m: float | None = None
     pct_change_1d: float | None
     pct_change_5d: float | None
     rsi_14: float | None
     signals_fired: dict | None
 
     model_config = {"from_attributes": True}
+
+
+class MarketRegimeOut(BaseModel):
+    regime: str  # risk_on|neutral|risk_off|unknown
+    spy_close: float | None = None
+    spy_sma200: float | None = None
+    spy_sma50: float | None = None
+    spy_sma50_slope_20d: float | None = None
+    vix: float | None = None
+    scan_run_id: int
+    as_of: datetime
+    effective_thesis_min_score: float
+
+
+@router.get("/scanner/regime", response_model=MarketRegimeOut)
+def get_market_regime(db: Session = Depends(get_db)) -> dict:
+    """Market regime recorded by the latest completed scan (ranking/regime.py)."""
+    from broker.ranking.regime import effective_thesis_min_score, latest_regime
+
+    info = latest_regime(db)
+    if info is None:
+        raise HTTPException(status_code=404, detail="No completed scan with a recorded regime yet")
+    return {**info, "effective_thesis_min_score": effective_thesis_min_score(info["regime"])}
 
 
 @router.get("/scanner/runs", response_model=list[ScanRunOut])

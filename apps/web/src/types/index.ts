@@ -40,6 +40,20 @@ export interface ScanRun {
   tickers_processed: number | null;
 }
 
+export type MarketRegimeLabel = "risk_on" | "neutral" | "risk_off" | "unknown";
+
+export interface MarketRegime {
+  regime: MarketRegimeLabel;
+  spy_close: number | null;
+  spy_sma200: number | null;
+  spy_sma50: number | null;
+  spy_sma50_slope_20d: number | null;
+  vix: number | null;
+  scan_run_id: number;
+  as_of: string;
+  effective_thesis_min_score: number;
+}
+
 export interface ScanResult {
   id: number;
   ticker: string;
@@ -80,7 +94,6 @@ export interface StockThesis {
   risk_factors: string;
   sector_context: string | null;
   peer_comparison: string | null;
-  elliott_wave_context: string | null;
   news_summary: string | null;
   catalysts: string | null;
   confidence: ThesisConfidence | null;
@@ -94,7 +107,6 @@ export interface ThesisTranslation {
   risk_factors: string;
   sector_context: string | null;
   peer_comparison: string | null;
-  elliott_wave_context: string | null;
   news_summary: string | null;
   catalysts: string | null;
 }
@@ -121,6 +133,12 @@ export interface OrderPreview {
   bull_case: string | null;
   bear_case: string | null;
   portfolio_impact: string | null;
+  // Descriptive ATR context (not recommendations): stop = entry - 2xATR,
+  // reference = entry + 3xATR, size = 1% equity risk to the stop, capped.
+  atr_14: number | null;
+  stop_price: number | null;
+  reference_target: number | null;
+  risk_sized_shares: number | null;
   risk_status: OrderRiskStatus;
   approval_required: boolean;
   status: OrderPreviewStatus;

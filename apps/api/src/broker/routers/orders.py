@@ -27,6 +27,11 @@ class OrderPreviewOut(BaseModel):
     bull_case: str | None
     bear_case: str | None
     portfolio_impact: str | None
+    # Descriptive ATR context, not recommendations (orders/sizing.py).
+    atr_14: float | None = None
+    stop_price: float | None = None
+    reference_target: float | None = None
+    risk_sized_shares: int | None = None
     risk_status: str
     approval_required: bool
     status: str
@@ -54,6 +59,7 @@ class CreateOrderPreviewRequest(BaseModel):
     order_type: str = "LIMIT"
     time_in_force: str = "DAY"
     execution_mode: str = "paper"  # paper|manual_tradingview
+    stop_price: float | None = None  # BUY only; defaults to entry - 2*ATR(14)
 
 
 class OpenTradingViewOut(BaseModel):
@@ -78,6 +84,7 @@ def preview_order(
             time_in_force=body.time_in_force,
             execution_mode=body.execution_mode,
             actor=actor,
+            stop_price=body.stop_price,
         )
     except service.InvalidOrderRequest as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
