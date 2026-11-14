@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from broker.db import get_db
 from broker.models.performance_review import PerformanceReview
 from broker.reports.paper_trading_health import build_paper_trading_health_report
+from broker.reports.signal_outcomes import HORIZONS, build_signal_outcomes_report
 from broker.reports.weekly_review_service import generate_weekly_review
 
 router = APIRouter()
@@ -92,3 +93,64 @@ def latest_weekly_review(db: Session = Depends(get_db)) -> PerformanceReviewOut:
     if review is None:
         raise HTTPException(status_code=404, detail="No weekly review has been generated yet")
     return PerformanceReviewOut.from_model(review)
+
+
+class OutcomeStatsOut(BaseModel):
+    n: int
+    mean: float | None
+    median: float | None
+    hit_rate: float | None
+
+
+class BenchmarkStatsOut(BaseModel):
+    vs_spy: OutcomeStatsOut
+    vs_sector: OutcomeStatsOut
+
+
+class BucketStatsOut(BenchmarkStatsOut):
+    min_composite: float | None = None
+    max_composite: float | None = None
+
+
+class ICOut(BaseModel):
+    ic: float | None
+    n: int
+
+
+class HorizonOutcomesOut(BaseModel):
+    horizon_bars: int
+    n_measured: int
+    n_pending: int
+    all: BenchmarkStatsOut
+    by_tier: dict[str, BenchmarkStatsOut]
+    by_bucket: dict[str, BucketStatsOut]
+    by_signal: dict[str, BenchmarkStatsOut]
+    by_weights_version: dict[str, BenchmarkStatsOut]
+    ic: dict[str, ICOut]
+
+
+class SignalOutcomesOut(BaseModel):
+    generated_at: datetime
+    since: date | None
+    flagged_only: bool
+    thesis_min_score: float
+    horizons: list[int]
+    n_observations: int
+    results: dict[str, HorizonOutcomesOut]
+
+
+@router.get("/reports/signal-outcomes", response_model=SignalOutcomesOut)
+def signal_outcomes(
+    since: date | None = None,
+    horizon: int | None = Query(None, description="Trading-bar horizon: 5, 20 or 60. Omit for all."),
+    flagged_only: bool = False,
+    db: Session = Depends(get_db),
+) -> SignalOutcomesOut:
+    """Forward excess returns of past scan results, aggregated by score tier,
+    composite quintile and signal, plus Spearman IC per sub-score.
+    Descriptive research statistics only."""
+    if horizon is not None and horizon not in HORIZONS:
+        raise HTTPException(status_code=422, detail=f"horizon must be one of {list(HORIZONS)}")
+    horizons = (horizon,) if horizon is not None else HORIZONS
+    report = build_signal_outcomes_report(db, since=since, horizons=horizons, flagged_only=flagged_only)
+    return SignalOutcomesOut(**report)
