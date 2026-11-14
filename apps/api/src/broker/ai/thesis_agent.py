@@ -16,6 +16,7 @@ from broker.models.news import NewsItem
 from broker.models.scan import ScanResult
 from broker.models.thesis import AgentRun, StockThesis
 from broker.models.watchlist import WatchlistEntry
+from broker.ranking.regime import effective_thesis_min_score, latest_regime_label
 
 logger = logging.getLogger(__name__)
 
@@ -162,16 +163,15 @@ class ThesisAgent:
         if scan is None and adhoc:
             scan = self._fetch_live_scan(ticker)
 
-        if (
-            not adhoc
-            and scan
-            and scan.composite_score is not None
-            and scan.composite_score < settings.thesis_min_score
-        ):
-            raise ValueError(
-                f"{ticker} composite_score {scan.composite_score:.3f} is below "
-                f"thesis_min_score {settings.thesis_min_score}"
-            )
+        if not adhoc and scan and scan.composite_score is not None:
+            # In a risk_off market regime the bar is raised (ranking/regime.py).
+            regime = latest_regime_label(self.db)
+            min_score = effective_thesis_min_score(regime)
+            if scan.composite_score < min_score:
+                raise ValueError(
+                    f"{ticker} composite_score {scan.composite_score:.3f} is below "
+                    f"the thesis threshold {min_score} (market regime: {regime or 'unknown'})"
+                )
 
         today = str(date.today())
         signals = scan.signals_fired if scan else None

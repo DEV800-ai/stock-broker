@@ -13,6 +13,7 @@ from broker.models.price_bar import PriceBar
 from broker.models.scan import ScanResult, ScanRun
 from broker.models.universe import StockUniverse
 from broker.models.watchlist import WatchlistEntry
+from broker.ranking.regime import compute_regime
 from broker.ranking.scorer import composite_weights, compute_scores, weights_version
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,18 @@ def load_recent_bars(db: Session, ticker: str, columns: list[str], n: int = _BAR
     if df.empty:
         return df
     return df.sort_values("bar_date").reset_index(drop=True)
+
+
+def _latest_vix() -> float | None:
+    """Latest ^VIX close via yfinance, or None. Display-only context."""
+    try:
+        from broker.data.yfinance_data import get_bars
+
+        df = get_bars("^VIX", days=5)
+        return float(df["close"].iloc[-1]) if not df.empty else None
+    except Exception:  # never let an optional stat fail the scan
+        logger.debug("VIX fetch failed", exc_info=True)
+        return None
 
 
 class ScanRunner:
@@ -87,6 +100,7 @@ class ScanRunner:
             self.db.commit()
 
             sector_bars_cache = self._load_sector_bars()
+            self._record_regime(run_id, sector_bars_cache.get(_FALLBACK_BENCHMARK))
             results = self._score_all(tickers, sector_bars_cache, run_id)
 
             flagged = [r for r in results if r.composite_score is not None and r.composite_score >= settings.scanner_min_score]
@@ -196,6 +210,16 @@ class ScanRunner:
             if not df.empty:
                 result[etf] = df
         return result
+
+    def _record_regime(self, run_id: int, spy_bars) -> None:
+        closes = spy_bars["close"] if spy_bars is not None else []
+        regime = compute_regime(closes)
+        regime["vix"] = _latest_vix()  # displayed stat only, never used in logic
+        run = self.db.get(ScanRun, run_id)
+        # Reassign (not mutate) so SQLAlchemy sees the JSONB change.
+        run.params_json = {**(run.params_json or {}), "regime": regime}
+        self.db.commit()
+        logger.info("Market regime: %s", regime["regime"])
 
     def _score_all(self, tickers: list[str], sector_bars: dict, run_id: int) -> list[ScanResult]:
         scan_date = date.today()

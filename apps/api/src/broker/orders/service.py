@@ -25,6 +25,7 @@ from broker.models.price_bar import PriceBar
 from broker.models.risk import AgentControl, RiskEvaluationRecord, RiskPolicy
 from broker.models.thesis import StockThesis
 from broker.models.universe import StockUniverse
+from broker.ranking.regime import latest_regime_label
 from broker.risk.engine import evaluate as evaluate_risk
 from broker.risk.types import PortfolioState, RiskContext, RiskPolicyParams, TradeProposal
 
@@ -215,6 +216,7 @@ def build_risk_context(
         avg_daily_volume=_avg_daily_volume(db, ticker),
         recent_rejections=_recent_rejections(db, ticker),
         recent_losses=_recent_losses(db, ticker),
+        market_regime=latest_regime_label(db),
     )
 
 

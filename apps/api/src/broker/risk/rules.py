@@ -72,6 +72,26 @@ def check_max_position_size(ctx: RiskContext) -> RuleResult:
     return RuleResult("max_position_size", True, f"Resulting position {pct:.1%} of NLV within limit")
 
 
+def check_regime_position_size(ctx: RiskContext) -> RuleResult:
+    """In a risk_off market regime, the max position size is scaled down by
+    policy.risk_off_position_size_multiplier (check_max_position_size still
+    applies the normal cap in every regime)."""
+    if ctx.market_regime != "risk_off":
+        return RuleResult("regime_position_size", True, f"Market regime {ctx.market_regime or 'unknown'}: no reduction")
+    if ctx.proposal.action != "BUY" or ctx.portfolio.net_liquidation <= 0:
+        return RuleResult("regime_position_size", True, "Not a buy, or no NLV to size against")
+    limit = ctx.policy.max_position_pct * ctx.policy.risk_off_position_size_multiplier
+    existing = ctx.portfolio.position_values.get(ctx.proposal.ticker, 0.0)
+    pct = (existing + ctx.proposal.estimated_value) / ctx.portfolio.net_liquidation
+    if pct > limit:
+        return RuleResult(
+            "regime_position_size", False,
+            f"Market regime is risk_off: resulting position {pct:.1%} of NLV exceeds the reduced max {limit:.1%}",
+            "needs_smaller_size",
+        )
+    return RuleResult("regime_position_size", True, f"Resulting position {pct:.1%} of NLV within risk_off max {limit:.1%}")
+
+
 def check_max_sector_exposure(ctx: RiskContext) -> RuleResult:
     if ctx.proposal.action != "BUY" or not ctx.proposal.sector or ctx.portfolio.net_liquidation <= 0:
         return RuleResult("max_sector_exposure", True, "Not a buy, or sector unknown")
@@ -153,6 +173,7 @@ RULES = [
     check_max_daily_loss,
     check_max_weekly_loss,
     check_max_position_size,
+    check_regime_position_size,
     check_max_sector_exposure,
     check_earnings_proximity,
     check_cooldown,

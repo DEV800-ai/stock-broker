@@ -55,3 +55,25 @@ def test_elliott_wave_removed_from_schema_and_prompts():
         {"why_interesting": "x", "risk_factors": "y", "elliott_wave_context": "wave 3"}
     )
     assert not hasattr(parsed, "elliott_wave_context")
+
+
+def test_thesis_gate_is_raised_in_risk_off_regime(monkeypatch):
+    import pytest
+
+    import broker.ai.thesis_agent as ta
+
+    agent = ta.ThesisAgent.__new__(ta.ThesisAgent)  # skip OpenAI client init
+    agent.db = None
+    monkeypatch.setattr(agent, "_load_scan", lambda *_: _scan(composite_score=0.60))
+    monkeypatch.setattr(agent, "_find_cached", lambda *_: "cached-thesis")
+
+    monkeypatch.setattr(ta, "latest_regime_label", lambda db: "risk_off")
+    with pytest.raises(ValueError, match="risk_off"):
+        agent.generate("AAPL")
+
+    monkeypatch.setattr(ta, "latest_regime_label", lambda db: "risk_on")
+    assert agent.generate("AAPL") == "cached-thesis"  # 0.60 clears the normal 0.50 bar
+
+    # ad-hoc analysis is never gated
+    monkeypatch.setattr(ta, "latest_regime_label", lambda db: "risk_off")
+    assert agent.generate("AAPL", adhoc=True) == "cached-thesis"

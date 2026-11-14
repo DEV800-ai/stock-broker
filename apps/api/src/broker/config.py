@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     composite_weight_rs: float = 0.40
     composite_weight_volume: float = 0.20
     thesis_min_score: float = 0.50
+    # Effective thesis threshold while the market regime is risk_off
+    # (ranking/regime.py): max(thesis_min_score, thesis_min_score_risk_off).
+    thesis_min_score_risk_off: float = 0.65
     thesis_recheck_max_age_hours: int = 24
     # Holding horizon the thesis agent is told to calibrate its reasoning and
     # confidence to — this app is paper-trading/swing-oriented, not day-trading.
